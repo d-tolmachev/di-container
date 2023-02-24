@@ -1,0 +1,50 @@
+stages:
+  - verify
+  - build
+  - test
+
+cache:
+  - key: gradle-cache
+    paths:
+      - .gradle/caches/
+      - .gradle/notifications/
+      - .gradle/wrapper/
+
+# verify stage
+checkstyle:
+  stage: verify
+  image: eclipse-temurin:17-jdk-jammy
+  script:
+    - curl -s https://api.github.com/repos/checkstyle/checkstyle/releases/latest | grep -wo 'https.*jar' | wget -q -O ./checkstyle.jar -i -
+    - java -jar ./checkstyle.jar src/ -c /google_checks.xml
+
+# build stage
+build-gradle:
+  stage: build
+  needs:
+    - checkstyle
+  image: eclipse-temurin:17-jdk-jammy
+  script:
+    - chmod +x ./gradlew
+    - ./gradlew --gradle-user-home .gradle/ bootJar
+  artifacts:
+    expire_in: 1 week
+    paths:
+      - build/libs/
+
+# test stage
+junit:
+  stage: test
+  needs:
+    - build-gradle
+  image: eclipse-temurin:17-jdk-jammy
+  script:
+    - chmod +x ./gradlew
+    - ./gradlew --gradle-user-home .gradle/ test
+  dependencies:
+    - build-gradle
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - build/test-results/test/**/TEST-*.xml
