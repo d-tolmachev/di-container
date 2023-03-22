@@ -1,8 +1,8 @@
 package team.zavod.di.config;
 
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.PreDestroy;
 import java.lang.annotation.Annotation;
-import javax.annotation.PostConstruct;
-import javax.annotation.PreDestroy;
 import team.zavod.di.exception.BeanException;
 
 public class InitDestroyBeanPostProcessor implements DestructionAwareBeanPostProcessor {

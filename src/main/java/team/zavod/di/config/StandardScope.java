@@ -1,6 +1,6 @@
 package team.zavod.di.config;
 
-public enum DefaultScopes {
+public enum StandardScope {
   SINGLETON,
   PROTOTYPE,
   THREAD

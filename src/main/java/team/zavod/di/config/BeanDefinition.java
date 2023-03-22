@@ -1,17 +1,41 @@
 package team.zavod.di.config;
 
 public interface BeanDefinition {
+  String getBeanName();
+
+  void setBeanName(String beanName);
+
   String getBeanClassName();
 
   void setBeanClassName(String beanClassName);
 
-  DefaultScopes getScope();
+  StandardScope getScope();
 
-  void setScope(DefaultScopes defaultScopes);
+  void setScope(StandardScope scope);
 
   boolean isLazyInit();
 
   void setLazyInit(boolean lazyInit);
+
+  boolean isPrimary();
+
+  void setPrimary(boolean primary);
+
+  String getFactoryBeanName();
+
+  void setFactoryBeanName(String factoryBeanName);
+
+  String getFactoryMethodName();
+
+  void setFactoryMethodName(String factoryMethodName);
+
+  String getInitMethodName();
+
+  void setInitMethodName(String initMethodName);
+
+  String getDestroyMethodName();
+
+  void setDestroyMethodName(String destroyMethodName);
 
   boolean isSingleton();
 

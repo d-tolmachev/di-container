@@ -2,10 +2,17 @@ package team.zavod.di.util;
 
 import java.io.BufferedInputStream;
 import java.io.DataInputStream;
-import java.io.File;
-import java.io.FileInputStream;
 import java.io.IOException;
+import java.lang.annotation.Annotation;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.net.URL;
+import java.nio.file.DirectoryStream;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystemNotFoundException;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -14,9 +21,10 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
-import java.util.stream.Collectors;
+import javassist.bytecode.AnnotationsAttribute;
 import javassist.bytecode.ClassFile;
 
 public class ClasspathHelper {
@@ -41,19 +49,33 @@ public class ClasspathHelper {
       "double", "D",
       "void", "V");
   private final Map<String, Set<String>> typesToSubTypes;
+  private final Map<String, Set<String>> annotationsToTypes;
   private final List<ClassLoader> classLoaders;
-  private final Set<URL> urls;
+  private final Map<URI, String> uriToRelativePath;
 
   public ClasspathHelper(String name) {
+    this(List.of(name));
+  }
+
+  public ClasspathHelper(List<String> names) {
     this.typesToSubTypes = new HashMap<>();
+    this.annotationsToTypes = new HashMap<>();
     this.classLoaders = getDefaultClassLoaders();
-    this.urls = new HashSet<>();
-    setUrlsForPackage(name);
+    this.uriToRelativePath = new HashMap<>();
+    names.forEach(this::setUrlsForPackage);
     scan();
   }
 
   public <T> Set<Class<? extends T>> getSubTypesOf(Class<T> type) {
-    return Set.copyOf(listClassesForNames(this.typesToSubTypes.get(type.getName())));
+    return Set.copyOf(listClassesForNames(getSubTypesOf(type.getName())));
+  }
+
+  public Set<Class<?>> getTypesAnnotatedWith(Class<? extends Annotation> annotation) {
+    return Set.copyOf(listClassesForNames(getTypesAnnotatedWith(annotation.getName())));
+  }
+
+  private List<ClassLoader> getDefaultClassLoaders() {
+    return List.of(Thread.currentThread().getContextClassLoader(), getClass().getClassLoader());
   }
 
   private void setUrlsForPackage(String name) {
@@ -63,16 +85,25 @@ public class ClasspathHelper {
         Enumeration<URL> resources = classLoader.getResources(resourceName);
         while (resources.hasMoreElements()) {
           URL resource = resources.nextElement();
-          this.urls.add(new URL(resource.toExternalForm().substring(0, resource.toExternalForm().lastIndexOf(resourceName))));
+          String resourceUrl = Objects.nonNull(resource.toURI().getPath()) ? resource.getPath().substring(1) : resourceName;
+          String resourcePath = Objects.nonNull(resource.toURI().getPath()) ? resource.toURI().getPath().substring(1) : resourceName;
+          this.uriToRelativePath.put(new URI(resource.toExternalForm().substring(0, resource.toExternalForm().lastIndexOf(resourceUrl))), resourcePath);
         }
-      } catch (IOException e) {
+      } catch (IOException | URISyntaxException e) {
         e.printStackTrace();
       }
     }
   }
 
   private void scan() {
-    this.urls.forEach(url -> getFiles(new File(url.getFile())).forEach(this::scan));
+    for (Entry<URI, String> entry : this.uriToRelativePath.entrySet()) {
+      try (FileSystem fileSystem = getFileSystem(entry.getKey())) {
+        getFiles(fileSystem.getPath(entry.getValue())).forEach(this::scan);
+      } catch (UnsupportedOperationException ignored) {
+      } catch (IOException e) {
+        e.printStackTrace();
+      }
+    }
   }
 
   private void scan(ClassFile classFile) {
@@ -84,6 +115,7 @@ public class ClasspathHelper {
     Arrays.stream(classFile.getInterfaces())
         .filter(anInterface -> !anInterface.equals(Object.class.getName()))
         .forEach(anInterface -> this.typesToSubTypes.computeIfAbsent(anInterface, k -> new HashSet<>()).add(className));
+    getClassAnnotationNames(classFile).forEach(annotationType -> this.annotationsToTypes.computeIfAbsent(annotationType, k -> new HashSet<>()).add(className));
   }
 
   @SuppressWarnings("unchecked")
@@ -91,26 +123,71 @@ public class ClasspathHelper {
     return classes.stream()
         .<Class<? extends T>>map(className -> (Class<? extends T>) classForName(className))
         .filter(Objects::nonNull)
-        .collect(Collectors.toList());
+        .toList();
   }
 
-  private List<ClassFile> getFiles(File directory) {
+  private Set<String> getSubTypesOf(String type) {
+    Set<String> subTypes = new HashSet<>();
+    if (this.typesToSubTypes.containsKey(type)) {
+      subTypes.addAll(this.typesToSubTypes.get(type));
+      this.typesToSubTypes.get(type).stream()
+          .filter(this.typesToSubTypes::containsKey)
+          .forEach(subType -> subTypes.addAll(getSubTypesOf(subType)));
+    }
+    return subTypes;
+  }
+
+  private Set<String> getTypesAnnotatedWith(String annotation) {
+    Set<String> types = new HashSet<>();
+    if (this.annotationsToTypes.containsKey(annotation)) {
+      types.addAll(this.annotationsToTypes.get(annotation));
+      this.annotationsToTypes.get(annotation).stream()
+          .filter(this.typesToSubTypes::containsKey)
+          .forEach(type -> types.addAll(getSubTypesOf(type)));
+    }
+    return types;
+  }
+
+  private List<ClassFile> getFiles(Path directory) {
     List<ClassFile> files = new ArrayList<>();
-    if (!directory.exists()) {
+    if (!Files.isDirectory(directory)) {
       return files;
     }
-    try {
-      for (File file : Objects.requireNonNull(directory.listFiles())) {
-        if (file.isDirectory()) {
-          files.addAll(getFiles(file));
-        } else if (file.getName().endsWith(".class")) {
-          files.add(new ClassFile(new DataInputStream(new BufferedInputStream(new FileInputStream(file)))));
+    try (DirectoryStream<Path> directories = Files.newDirectoryStream(directory)) {
+      for (Path path : directories) {
+        if (Files.isDirectory(path)) {
+          files.addAll(getFiles(path));
+        } else if (path.getFileName().toString().endsWith(".class")) {
+          files.add(new ClassFile(new DataInputStream(new BufferedInputStream(Files.newInputStream(path)))));
         }
       }
     } catch (IOException e) {
       e.printStackTrace();
     }
     return files;
+  }
+
+  private FileSystem getFileSystem(URI uri) {
+    FileSystem fileSystem = FileSystems.getDefault();
+    try {
+      try {
+        fileSystem = FileSystems.getFileSystem(uri);
+      } catch (FileSystemNotFoundException ignored) {
+        fileSystem = FileSystems.newFileSystem(uri, Map.of());
+      }
+    } catch (IOException e) {
+      e.printStackTrace();
+    }
+    return fileSystem;
+  }
+
+  private List<String> getClassAnnotationNames(ClassFile classFile) {
+    List<String> annotations = new ArrayList<>();
+    AnnotationsAttribute annotationsAttribute = (AnnotationsAttribute) classFile.getAttribute(AnnotationsAttribute.visibleTag);
+    if (Objects.nonNull(annotationsAttribute)) {
+      Arrays.stream(annotationsAttribute.getAnnotations()).forEach(annotation -> annotations.add(annotation.getTypeName()));
+    }
+    return annotations;
   }
 
   private Class<?> classForName(String typeName) {
@@ -130,9 +207,5 @@ public class ClasspathHelper {
       }
     }
     return null;
-  }
-
-  private List<ClassLoader> getDefaultClassLoaders() {
-    return List.of(Thread.currentThread().getContextClassLoader(), getClass().getClassLoader());
   }
 }

@@ -3,26 +3,30 @@ package team.zavod.di.context;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import team.zavod.di.config.BeanDefinition;
 import team.zavod.di.config.BeanPostProcessor;
+import team.zavod.di.factory.ObjectProvider;
 import team.zavod.di.factory.exception.BeanDefinitionStoreException;
 import team.zavod.di.exception.BeanException;
+import team.zavod.di.factory.exception.BeanStoreException;
 import team.zavod.di.factory.exception.NoSuchBeanDefinitionException;
 import team.zavod.di.factory.BeanFactory;
-import team.zavod.di.factory.BeanRegistry;
-import team.zavod.di.factory.SimpleBeanRegistry;
+import team.zavod.di.factory.SingletonBeanRegistry;
+import team.zavod.di.factory.DefaultSingletonBeanRegistry;
+import team.zavod.di.factory.exception.NoSuchBeanException;
 
 public class GenericApplicationContext implements ApplicationContext {
   private String id;
   private final BeanFactory beanFactory;
   private final List<BeanPostProcessor> beanPostProcessors;
-  private final BeanRegistry beanRegistry;
+  private final SingletonBeanRegistry singletonBeanRegistry;
 
   public GenericApplicationContext(BeanFactory beanFactory) {
     this.id = generateId();
     this.beanFactory = beanFactory;
     this.beanPostProcessors = new ArrayList<>();
-    this.beanRegistry = new SimpleBeanRegistry();
+    this.singletonBeanRegistry = new DefaultSingletonBeanRegistry();
   }
 
   @Override
@@ -46,18 +50,23 @@ public class GenericApplicationContext implements ApplicationContext {
   }
 
   @Override
-  public boolean containsBean(String name) {
-    return this.beanRegistry.containsBean(name);
+  public <T> ObjectProvider<T> getBeanProvider(Class<T> requiredType) {
+    return this.beanFactory.getBeanProvider(requiredType);
   }
 
   @Override
   public boolean isSingleton(String name) throws NoSuchBeanDefinitionException {
-    return this.beanFactory.getBeanDefinition(name).isSingleton();
+    return this.beanFactory.isSingleton(name);
   }
 
   @Override
   public boolean isPrototype(String name) throws NoSuchBeanDefinitionException {
-    return this.beanFactory.getBeanDefinition(name).isPrototype();
+    return this.beanFactory.isPrototype(name);
+  }
+
+  @Override
+  public boolean containsBean(String name) {
+    return this.singletonBeanRegistry.containsSingleton(name);
   }
 
   @Override
@@ -76,13 +85,13 @@ public class GenericApplicationContext implements ApplicationContext {
   }
 
   @Override
-  public boolean containsBeanDefinition(String beanName) {
-    return this.beanFactory.containsBeanDefinition(beanName);
+  public boolean containsBeanDefinition(String bean) {
+    return this.beanFactory.containsBeanDefinition(bean);
   }
 
   @Override
-  public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition) throws BeanDefinitionStoreException {
-    this.beanFactory.registerBeanDefinition(beanName, beanDefinition);
+  public void registerBeanDefinition(BeanDefinition beanDefinition) throws BeanDefinitionStoreException {
+    this.beanFactory.registerBeanDefinition(beanDefinition);
   }
 
   @Override
@@ -91,8 +100,48 @@ public class GenericApplicationContext implements ApplicationContext {
   }
 
   @Override
-  public BeanDefinition getBeanDefinition(String beanName) throws NoSuchBeanDefinitionException {
-    return this.beanFactory.getBeanDefinition(beanName);
+  public BeanDefinition getBeanDefinition(String bean) throws NoSuchBeanDefinitionException {
+    return this.beanFactory.getBeanDefinition(bean);
+  }
+
+  @Override
+  public Set<BeanDefinition> getBeanDefinitions(String beanClassName) throws NoSuchBeanDefinitionException {
+    return this.beanFactory.getBeanDefinitions(beanClassName);
+  }
+
+  @Override
+  public boolean containsSingleton(Class<?> beanType) {
+    return this.singletonBeanRegistry.containsSingleton(beanType);
+  }
+
+  @Override
+  public boolean containsSingleton(String beanName) {
+    return this.singletonBeanRegistry.containsSingleton(beanName);
+  }
+
+  @Override
+  public void registerSingleton(Class<?> beanType, String beanName, Object bean) throws BeanStoreException {
+    this.singletonBeanRegistry.registerSingleton(beanType, beanName, bean);
+  }
+
+  @Override
+  public void removeSingleton(String beanName) throws NoSuchBeanException {
+    this.singletonBeanRegistry.removeSingleton(beanName);
+  }
+
+  @Override
+  public Object getSingleton(Class<?> beanType) throws NoSuchBeanException {
+    return this.singletonBeanRegistry.getSingleton(beanType);
+  }
+
+  @Override
+  public Object getSingleton(String beanName) throws NoSuchBeanException {
+    return this.singletonBeanRegistry.getSingleton(beanName);
+  }
+
+  @Override
+  public Set<Object> getSingletons(Class<?> beanType) throws NoSuchBeanException {
+    return this.singletonBeanRegistry.getSingletons(beanType);
   }
 
   @Override

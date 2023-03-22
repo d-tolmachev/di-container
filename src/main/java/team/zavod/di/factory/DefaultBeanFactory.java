@@ -1,17 +1,21 @@
 package team.zavod.di.factory;
 
+import java.util.Set;
 import team.zavod.di.config.BeanDefinition;
 import team.zavod.di.configuration.BeanConfigurator;
-import team.zavod.di.configuration.Configuration;
+import team.zavod.di.configuration.ConfigurationMetadata;
+import team.zavod.di.configuration.GenericBeanConfigurator;
 import team.zavod.di.exception.BeanException;
+import team.zavod.di.factory.exception.BeanDefinitionStoreException;
+import team.zavod.di.factory.exception.NoSuchBeanDefinitionException;
 
 public class DefaultBeanFactory implements BeanFactory {
   private final BeanConfigurator beanConfigurator;
   private final BeanDefinitionRegistry beanDefinitionRegistry;
 
-  public DefaultBeanFactory(Configuration configuration) {
-    this.beanConfigurator = BeanConfiguratorFactory.newBeanConfigurator(configuration);
-    this.beanDefinitionRegistry = this.beanConfigurator.getConfiguration().getBeanDefinitionRegistry();
+  public DefaultBeanFactory(ConfigurationMetadata configurationMetadata) {
+    this.beanConfigurator = new GenericBeanConfigurator(configurationMetadata);
+    this.beanDefinitionRegistry = this.beanConfigurator.getConfigurationMetadata().getBeanDefinitionRegistry();
   }
 
   @Override
@@ -25,22 +29,42 @@ public class DefaultBeanFactory implements BeanFactory {
   }
 
   @Override
-  public boolean containsBeanDefinition(String beanName) {
-    return this.beanDefinitionRegistry.containsBeanDefinition(beanName);
+  public <T> ObjectProvider<T> getBeanProvider(Class<T> requiredType) {
+    return this.beanConfigurator.getBeanProvider(requiredType);
   }
 
   @Override
-  public void registerBeanDefinition(String beanName, BeanDefinition beanDefinition) {
-    this.beanDefinitionRegistry.registerBeanDefinition(beanName, beanDefinition);
+  public boolean isSingleton(String name) throws NoSuchBeanDefinitionException {
+    return this.beanDefinitionRegistry.getBeanDefinition(name).isSingleton();
   }
 
   @Override
-  public void removeBeanDefinition(String beanName) {
+  public boolean isPrototype(String name) throws NoSuchBeanDefinitionException {
+    return this.beanDefinitionRegistry.getBeanDefinition(name).isPrototype();
+  }
+
+  @Override
+  public boolean containsBeanDefinition(String bean) {
+    return this.beanDefinitionRegistry.containsBeanDefinition(bean);
+  }
+
+  @Override
+  public void registerBeanDefinition(BeanDefinition beanDefinition) throws BeanDefinitionStoreException {
+    this.beanDefinitionRegistry.registerBeanDefinition(beanDefinition);
+  }
+
+  @Override
+  public void removeBeanDefinition(String beanName) throws NoSuchBeanDefinitionException {
     this.beanDefinitionRegistry.removeBeanDefinition(beanName);
   }
 
   @Override
-  public BeanDefinition getBeanDefinition(String beanName) {
-    return this.beanDefinitionRegistry.getBeanDefinition(beanName);
+  public BeanDefinition getBeanDefinition(String bean) throws NoSuchBeanDefinitionException {
+    return this.beanDefinitionRegistry.getBeanDefinition(bean);
+  }
+
+  @Override
+  public Set<BeanDefinition> getBeanDefinitions(String beanClassName) throws NoSuchBeanDefinitionException {
+    return this.beanDefinitionRegistry.getBeanDefinitions(beanClassName);
   }
 }

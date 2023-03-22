@@ -69,9 +69,9 @@ public class ConstructorArgumentValues {
     this.genericArgumentValues.removeIf(value -> value.getName().equals(name));
   }
 
-  public ValueHolder getGenericArgumentValue(Class<?> requiredType, String requiredName) {
+  public ValueHolder getGenericArgumentValue(String requiredType, String requiredName) {
     return this.genericArgumentValues.stream()
-        .filter(value -> value.getType().equals(requiredType.getName()) && value.getName().equals(requiredName))
+        .filter(value -> value.getType().equals(requiredType) && value.getName().equals(requiredName))
         .findFirst().orElse(null);
   }
 
@@ -79,7 +79,7 @@ public class ConstructorArgumentValues {
     return this.genericArgumentValues;
   }
 
-  public ValueHolder getArgumentValue(int index, Class<?> requiredType, String requiredName) {
+  public ValueHolder getArgumentValue(int index, String requiredType, String requiredName) {
     return hasIndexedArgumentValue(index) ? getIndexedArgumentValue(index) : getGenericArgumentValue(requiredType, requiredName);
   }
 

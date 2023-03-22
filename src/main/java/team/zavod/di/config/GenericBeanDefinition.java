@@ -3,13 +3,34 @@ package team.zavod.di.config;
 import java.util.Objects;
 
 public class GenericBeanDefinition implements BeanDefinition {
+  private String beanName;
   private String beanClassName;
-  private DefaultScopes scope;
+  private StandardScope scope;
   private boolean lazyInit;
+  private boolean primary;
+  private String factoryBeanName;
+  private String factoryMethodName;
+  private String initMethodName;
+  private String destroyMethodName;
   private ConstructorArgumentValues constructorArgumentValues;
   private PropertyValues propertyValues;
 
   public GenericBeanDefinition() {
+    this.scope = StandardScope.SINGLETON;
+    this.lazyInit = false;
+    this.primary = false;
+    this.constructorArgumentValues = new ConstructorArgumentValues();
+    this.propertyValues = new PropertyValues();
+  }
+
+  @Override
+  public String getBeanName() {
+    return this.beanName;
+  }
+
+  @Override
+  public void setBeanName(String beanName) {
+    this.beanName = beanName;
   }
 
   @Override
@@ -23,12 +44,12 @@ public class GenericBeanDefinition implements BeanDefinition {
   }
 
   @Override
-  public DefaultScopes getScope() {
+  public StandardScope getScope() {
     return this.scope;
   }
 
   @Override
-  public void setScope(DefaultScopes scope) {
+  public void setScope(StandardScope scope) {
     this.scope = scope;
   }
 
@@ -43,13 +64,63 @@ public class GenericBeanDefinition implements BeanDefinition {
   }
 
   @Override
+  public boolean isPrimary() {
+    return this.primary;
+  }
+
+  @Override
+  public void setPrimary(boolean primary) {
+    this.primary = primary;
+  }
+
+  @Override
+  public String getFactoryBeanName() {
+    return this.factoryBeanName;
+  }
+
+  @Override
+  public void setFactoryBeanName(String factoryBeanName) {
+    this.factoryBeanName = factoryBeanName;
+  }
+
+  @Override
+  public String getFactoryMethodName() {
+    return this.factoryMethodName;
+  }
+
+  @Override
+  public void setFactoryMethodName(String factoryMethodName) {
+    this.factoryMethodName = factoryMethodName;
+  }
+
+  @Override
+  public String getInitMethodName() {
+    return this.initMethodName;
+  }
+
+  @Override
+  public void setInitMethodName(String initMethodName) {
+    this.initMethodName = initMethodName;
+  }
+
+  @Override
+  public String getDestroyMethodName() {
+    return this.destroyMethodName;
+  }
+
+  @Override
+  public void setDestroyMethodName(String destroyMethodName) {
+    this.destroyMethodName = destroyMethodName;
+  }
+
+  @Override
   public boolean isSingleton() {
-    return this.scope == DefaultScopes.SINGLETON;
+    return this.scope == StandardScope.SINGLETON;
   }
 
   @Override
   public boolean isPrototype() {
-    return this.scope == DefaultScopes.PROTOTYPE;
+    return this.scope == StandardScope.PROTOTYPE;
   }
 
   @Override

@@ -30,9 +30,9 @@ public class PropertyValues {
     this.propertyValues.removeIf(value -> value.getName().equals(name));
   }
 
-  public ValueHolder getPropertyValue(Class<?> requiredType, String requiredName) {
+  public ValueHolder getPropertyValue(String requiredType, String requiredName) {
     return this.propertyValues.stream()
-        .filter(value -> value.getType().equals(requiredType.getName()) && value.getName().equals(requiredName))
+        .filter(value -> value.getType().equals(requiredType) && value.getName().equals(requiredName))
         .findFirst().orElse(null);
   }
 

@@ -1,7 +1,11 @@
 package team.zavod.di.configuration;
 
-public interface BeanConfigurator {
-  <T> Class<? extends T> getImplementationClass(Class<T> type);
+import team.zavod.di.factory.ObjectProvider;
 
-  Configuration getConfiguration();
+public interface BeanConfigurator {
+  <T> ObjectProvider<T> getBeanProvider(Class<T> requiredType);
+
+  <T> Class<? extends T> getImplementationClass(Class<T> requiredType);
+
+  ConfigurationMetadata getConfigurationMetadata();
 }

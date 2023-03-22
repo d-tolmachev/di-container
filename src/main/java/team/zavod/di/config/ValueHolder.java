@@ -5,6 +5,9 @@ public class ValueHolder {
   private String type;
   private String name;
 
+  public ValueHolder() {
+  }
+
   public ValueHolder(Object value, String type, String name) {
     this.value = value;
     this.type = type;

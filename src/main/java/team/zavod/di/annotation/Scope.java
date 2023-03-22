@@ -4,10 +4,10 @@ import java.lang.annotation.ElementType;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
+import team.zavod.di.config.StandardScope;
 
-@Target({ElementType.TYPE})
+@Target({ElementType.TYPE, ElementType.METHOD})
 @Retention(RetentionPolicy.RUNTIME)
-@Component
-public @interface Configuration {
-  String value() default "";
+public @interface Scope {
+  StandardScope value();
 }
