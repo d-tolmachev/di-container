@@ -1,4 +1,4 @@
-package team.zavod.di.configuration;
+package team.zavod.di.configuration.metadata;
 
 import java.util.List;
 import team.zavod.di.factory.BeanDefinitionRegistry;

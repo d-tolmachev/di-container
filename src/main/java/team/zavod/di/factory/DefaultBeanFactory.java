@@ -1,9 +1,10 @@
 package team.zavod.di.factory;
 
+import java.lang.reflect.InvocationTargetException;
 import java.util.Set;
 import team.zavod.di.config.BeanDefinition;
 import team.zavod.di.configuration.BeanConfigurator;
-import team.zavod.di.configuration.ConfigurationMetadata;
+import team.zavod.di.configuration.metadata.ConfigurationMetadata;
 import team.zavod.di.configuration.GenericBeanConfigurator;
 import team.zavod.di.exception.BeanException;
 import team.zavod.di.factory.exception.BeanDefinitionStoreException;
@@ -20,7 +21,16 @@ public class DefaultBeanFactory implements BeanFactory {
 
   @Override
   public <T> T getBean(Class<T> requiredType) throws BeanException {
-    return null;  // TODO
+    Class<? extends T> implementationClass = requiredType;
+    if (implementationClass.isInterface()) {
+      implementationClass = beanConfigurator.getImplementationClass(implementationClass);
+    }
+
+    try {
+      return implementationClass.getDeclaredConstructor().newInstance();
+    } catch (InstantiationException | NoSuchMethodException | InvocationTargetException | IllegalAccessException e) {
+      throw new RuntimeException(e);
+    }
   }
 
   @Override

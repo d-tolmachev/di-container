@@ -1,4 +1,4 @@
-package team.zavod.di.configuration;
+package team.zavod.di.configuration.metadata;
 
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;

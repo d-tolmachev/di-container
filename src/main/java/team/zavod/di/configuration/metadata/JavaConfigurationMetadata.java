@@ -1,4 +1,4 @@
-package team.zavod.di.configuration;
+package team.zavod.di.configuration.metadata;
 
 import java.lang.reflect.Method;
 import java.util.ArrayList;
