@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
@@ -39,6 +40,7 @@ import team.zavod.di.factory.registry.BeanDefinitionRegistry;
 import team.zavod.di.util.ClasspathHelper;
 
 public class DefaultBeanFactory implements BeanFactory {
+  private final Set<BeanDefinition> dependencyContext;
   private final BeanConfigurator beanConfigurator;
   private final ClasspathHelper classpathHelper;
   private final BeanDefinitionRegistry beanDefinitionRegistry;
@@ -46,6 +48,7 @@ public class DefaultBeanFactory implements BeanFactory {
   private final Map<String, Scope> scopes;
 
   private DefaultBeanFactory(ConfigurationMetadata configurationMetadata) {
+    this.dependencyContext = new HashSet<>();
     this.beanConfigurator = new GenericBeanConfigurator(configurationMetadata);
     this.classpathHelper = this.beanConfigurator.getConfigurationMetadata().getClasspathHelper();
     this.beanDefinitionRegistry = this.beanConfigurator.getConfigurationMetadata().getBeanDefinitionRegistry();
@@ -105,7 +108,13 @@ public class DefaultBeanFactory implements BeanFactory {
     if (!this.scopes.containsKey(beanDefinition.getScope())) {
       throw new BeanException("Error! Failed to find " + beanDefinition.getScope() + " scope for " + name + " bean!");
     }
-    return (T) getScope(beanDefinition.getScope()).get(name, requiredType, getProvider(beanDefinition));
+    if (!this.dependencyContext.add(beanDefinition)) {
+      throw new BeanException("Error! Failed to instantiate " + name + " bean due to circular dependencies!");
+    }
+    T bean = (T) getScope(beanDefinition.getScope()).get(name, requiredType, getProvider(beanDefinition));
+    this.dependencyContext.remove(beanDefinition);
+    processInitialization(beanDefinition, bean);
+    return bean;
   }
 
   @Override
@@ -117,7 +126,7 @@ public class DefaultBeanFactory implements BeanFactory {
     try {
       Object bean = getScope(getBeanDefinition(name).getScope()).remove(name);
       if (Objects.nonNull(bean)) {
-        processDestruction(name, bean);
+        processDestruction(beanDefinition, bean);
       }
     } catch (UnsupportedOperationException ignored) {
     }
@@ -233,11 +242,26 @@ public class DefaultBeanFactory implements BeanFactory {
     };
   }
 
-  private void processDestruction(String beanName, Object bean) {
+  private <T> void processInitialization(BeanDefinition beanDefinition, T bean) {
+    try {
+      Map<String, Field> fields = Arrays.stream(bean.getClass().getDeclaredFields()).collect(Collectors.toMap(Field::getName, field -> field));
+      Map<Field, ObjectProvider<?>> fieldProviders = getBeanInitializationDependencies(fields, beanDefinition.getPropertyValues());
+      for (Entry<Field, ObjectProvider<?>> fieldProvider : fieldProviders.entrySet()) {
+        fieldProvider.getKey().setAccessible(true);
+        if (Objects.isNull(fieldProvider.getKey().get(bean))) {
+          fieldProvider.getKey().set(bean, fieldProvider.getValue().getObject());
+        }
+      }
+    } catch (IllegalAccessException e) {
+      throw new BeanException("Error! Failed to initialize dependencies for " + beanDefinition.getBeanName() + " bean!");
+    }
+  }
+
+  private void processDestruction(BeanDefinition beanDefinition, Object bean) {
     this.beanPostProcessors.stream()
         .filter(beanPostProcessor -> beanPostProcessor.getClass().isInstance(DestructionAwareBeanPostProcessor.class))
         .map(beanPostProcessor -> (DestructionAwareBeanPostProcessor) beanPostProcessor)
-        .forEach(beanPostProcessor -> beanPostProcessor.postProcessBeforeDestruction(bean, beanName));
+        .forEach(beanPostProcessor -> beanPostProcessor.postProcessBeforeDestruction(bean, beanDefinition.getBeanName()));
   }
 
   @SuppressWarnings("unchecked")
@@ -248,16 +272,9 @@ public class DefaultBeanFactory implements BeanFactory {
     }
     try {
       Constructor<? extends T> constructor = (Constructor<? extends T>) getBeanConstructor(Arrays.asList(beanClass.getDeclaredConstructors()), beanDefinition.getConstructorArgumentValues());
-      Object[] initArgs = getBeanConstructionDependencies(constructor.getParameters(), beanDefinition.getConstructorArgumentValues());
+      List<ObjectProvider<?>> initArgProviders = getBeanConstructionDependencies(constructor.getParameters(), beanDefinition.getConstructorArgumentValues());
       constructor.setAccessible(true);
-      T bean = constructor.newInstance(initArgs);
-      Map<String, Field> fields = Arrays.stream(beanClass.getDeclaredFields()).collect(Collectors.toMap(Field::getName, field -> field));
-      Map<Field, Object> fieldValues = getBeanInitializationDependencies(fields, beanDefinition.getPropertyValues());
-      for (Entry<Field, Object> fieldValue : fieldValues.entrySet()) {
-        fieldValue.getKey().setAccessible(true);
-        fieldValue.getKey().set(bean, fieldValue.getValue());
-      }
-      return bean;
+      return constructor.newInstance(initArgProviders.stream().map(ObjectProvider::getObject).toArray(Object[]::new));
     } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
       throw new BeanException("Error! Failed to instantiate " + beanDefinition.getBeanName() + " bean!");
     }
@@ -284,20 +301,20 @@ public class DefaultBeanFactory implements BeanFactory {
     } else throw new BeanException("Error! Failed to find constructor for bean!");
   }
 
-  private Object[] getBeanConstructionDependencies(Parameter[] parameters, ConstructorArgumentValues constructorArgumentValues) {
-    Object[] beanDependencies = new Object[parameters.length];
+  private List<ObjectProvider<?>> getBeanConstructionDependencies(Parameter[] parameters, ConstructorArgumentValues constructorArgumentValues) {
+    List<ObjectProvider<?>> beanDependencies = new ArrayList<>(parameters.length);
     for (int i = 0; i < parameters.length; i++) {
       ValueHolder valueHolder = parameters[i].isNamePresent() ? constructorArgumentValues.getGenericArgumentValue(parameters[i].getName()) : constructorArgumentValues.getIndexedArgumentValue(i);
       if (Objects.isNull(valueHolder.getValueProvider())) {
         valueHolder.setValueProvider(getBeanProvider(valueHolder.getBeanName(), this.classpathHelper.classForName(getBeanDefinition(valueHolder.getBeanName()).getBeanClassName())));
       }
-      beanDependencies[i] = valueHolder.getValueProvider().getObject();
+      beanDependencies.add(valueHolder.getValueProvider());
     }
     return beanDependencies;
   }
 
-  private Map<Field, Object> getBeanInitializationDependencies(Map<String, Field> fields, PropertyValues propertyValues) {
-    Map<Field, Object> beanDependencies = new HashMap<>();
+  private Map<Field, ObjectProvider<?>> getBeanInitializationDependencies(Map<String, Field> fields, PropertyValues propertyValues) {
+    Map<Field, ObjectProvider<?>> beanDependencies = new HashMap<>();
     for (ValueHolder valueHolder : propertyValues.getPropertyValues()) {
       if (!fields.containsKey(valueHolder.getName())) {
         throw new BeanException("Error! Failed to find " + valueHolder.getName() + " field!");
@@ -305,7 +322,7 @@ public class DefaultBeanFactory implements BeanFactory {
       if (Objects.isNull(valueHolder.getValueProvider())) {
         valueHolder.setValueProvider(getBeanProvider(valueHolder.getBeanName(), this.classpathHelper.classForName(getBeanDefinition(valueHolder.getBeanName()).getBeanClassName())));
       }
-      beanDependencies.put(fields.get(valueHolder.getName()), valueHolder.getValueProvider().getObject());
+      beanDependencies.put(fields.get(valueHolder.getName()), valueHolder.getValueProvider());
     }
     return beanDependencies;
   }
