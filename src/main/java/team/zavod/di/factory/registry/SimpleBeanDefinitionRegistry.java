@@ -1,7 +1,8 @@
-package team.zavod.di.factory;
+package team.zavod.di.factory.registry;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -65,5 +66,9 @@ public class SimpleBeanDefinitionRegistry implements BeanDefinitionRegistry {
       throw new NoSuchBeanDefinitionException("Error! Failed to determine bean definition for " + beanClassName + "!");
     }
     return this.beanClassNamesToBeanDefinitions.get(beanClassName);
+  }
+
+  public List<String> getBeanDefinitionNames() {
+    return List.copyOf(this.beanNamesToBeanDefinitions.keySet());
   }
 }

@@ -1,6 +1,6 @@
 package team.zavod.di.exception;
 
-public abstract class FatalBeanException extends BeanException {
+public class FatalBeanException extends BeanException {
   public FatalBeanException() {
     super();
   }

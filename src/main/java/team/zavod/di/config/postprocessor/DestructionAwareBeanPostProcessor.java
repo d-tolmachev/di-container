@@ -1,4 +1,4 @@
-package team.zavod.di.config;
+package team.zavod.di.config.postprocessor;
 
 import team.zavod.di.exception.BeanException;
 

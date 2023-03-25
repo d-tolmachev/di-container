@@ -1,11 +1,16 @@
 package team.zavod.di.config;
 
 import java.util.Objects;
+import team.zavod.di.config.dependency.ConstructorArgumentValues;
+import team.zavod.di.config.dependency.PropertyValues;
+import team.zavod.di.config.scope.PrototypeScope;
+import team.zavod.di.config.scope.SingletonScope;
+import team.zavod.di.config.scope.ThreadScope;
 
 public class GenericBeanDefinition implements BeanDefinition {
   private String beanName;
   private String beanClassName;
-  private StandardScope scope;
+  private String scope;
   private boolean lazyInit;
   private boolean primary;
   private String factoryBeanName;
@@ -16,8 +21,8 @@ public class GenericBeanDefinition implements BeanDefinition {
   private PropertyValues propertyValues;
 
   public GenericBeanDefinition() {
-    this.scope = StandardScope.SINGLETON;
-    this.lazyInit = false;
+    this.scope = SingletonScope.getName();
+    this.lazyInit = true;
     this.primary = false;
     this.constructorArgumentValues = new ConstructorArgumentValues();
     this.propertyValues = new PropertyValues();
@@ -44,12 +49,12 @@ public class GenericBeanDefinition implements BeanDefinition {
   }
 
   @Override
-  public StandardScope getScope() {
+  public String getScope() {
     return this.scope;
   }
 
   @Override
-  public void setScope(StandardScope scope) {
+  public void setScope(String scope) {
     this.scope = scope;
   }
 
@@ -115,12 +120,17 @@ public class GenericBeanDefinition implements BeanDefinition {
 
   @Override
   public boolean isSingleton() {
-    return this.scope == StandardScope.SINGLETON;
+    return this.scope.equals(SingletonScope.getName());
   }
 
   @Override
   public boolean isPrototype() {
-    return this.scope == StandardScope.PROTOTYPE;
+    return this.scope.equals(PrototypeScope.getName());
+  }
+
+  @Override
+  public boolean isThread() {
+    return this.scope.equals(ThreadScope.getName());
   }
 
   @Override

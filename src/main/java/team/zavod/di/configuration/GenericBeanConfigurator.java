@@ -1,43 +1,42 @@
 package team.zavod.di.configuration;
 
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
-
+import java.util.stream.Collectors;
 import team.zavod.di.configuration.metadata.ConfigurationMetadata;
-import team.zavod.di.exception.ConfigurationException;
-import team.zavod.di.factory.ObjectProvider;
+import team.zavod.di.factory.registry.BeanDefinitionRegistry;
+import team.zavod.di.factory.exception.NoSuchBeanException;
+import team.zavod.di.factory.exception.NoUniqueBeanException;
 import team.zavod.di.util.ClasspathHelper;
 
 public class GenericBeanConfigurator implements BeanConfigurator {
   private final ConfigurationMetadata configurationMetadata;
   private final ClasspathHelper classpathHelper;
-  private final Map<Class<?>, ObjectProvider<?>> typesToBeanProviders;
-  private final Map<Class, Class> interfacesToImplementations;
+  private final BeanDefinitionRegistry beanDefinitionRegistry;
+  private final Map<Class<?>, Class<?>> interfacesToImplementations;
 
   public GenericBeanConfigurator(ConfigurationMetadata configurationMetadata) {
     this.configurationMetadata = configurationMetadata;
     this.classpathHelper = this.configurationMetadata.getClasspathHelper();
-    this.typesToBeanProviders = new HashMap<>();
+    this.beanDefinitionRegistry = this.configurationMetadata.getBeanDefinitionRegistry();
     this.interfacesToImplementations = new ConcurrentHashMap<>();
   }
 
+  @SuppressWarnings("unchecked")
   @Override
-  public <T> ObjectProvider<T> getBeanProvider(Class<T> requiredType) {
-    return null;  // TODO
-  }
-
-  @Override
-  public <T> Class<? extends T> getImplementationClass(Class<T> requiredType) {
-    return interfacesToImplementations.computeIfAbsent(requiredType, clazz -> {
-      Set<Class<? extends T>> implementationClasses = classpathHelper.getSubTypesOf(requiredType);
-      if (implementationClasses.size() != 1) {
-        throw new RuntimeException("Interface has 0 or more than 1 implementations");
-      }
-
-      return implementationClasses.stream().findFirst().get();
-    });
+  public <T> Class<? extends T> getImplementationClass(Class<T> requiredType) throws NoSuchBeanException {
+    if (!this.interfacesToImplementations.containsKey(requiredType)) {
+      Set<Class<? extends T>> implementationClasses = this.classpathHelper.getSubTypesOf(requiredType).stream()
+          .filter(subType -> this.configurationMetadata.getPackagesToScan().stream().anyMatch(packageToScan -> subType.getPackageName().startsWith(packageToScan)))
+          .collect(Collectors.toSet());
+      if (implementationClasses.size() > 1) {
+        throw new NoUniqueBeanException("Error! " + requiredType.getName() + " has more than 1 implementations!");
+      } else if (!implementationClasses.isEmpty()) {
+        this.interfacesToImplementations.put(requiredType, implementationClasses.iterator().next());
+      } else throw new NoSuchBeanException("" + requiredType.getName() + " has no implementations!");
+    }
+    return (Class<? extends T>) this.interfacesToImplementations.get(requiredType);
   }
 
   @Override

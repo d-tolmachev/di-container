@@ -1,6 +1,7 @@
-package team.zavod.di.factory;
+package team.zavod.di.factory.registry;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -74,5 +75,10 @@ public class DefaultSingletonBeanRegistry implements SingletonBeanRegistry {
       throw new NoSuchBeanException("Error! Failed to determine bean for " + beanType.getName() + "!");
     }
     return this.beanTypesToBeans.get(beanType);
+  }
+
+  @Override
+  public List<String> getSingletonNames() {
+    return List.copyOf(this.beanNamesToBeans.keySet());
   }
 }

@@ -2,9 +2,7 @@ package team.zavod.di.configuration.metadata;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
@@ -13,14 +11,13 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 import team.zavod.di.config.BeanDefinition;
-import team.zavod.di.config.ConstructorArgumentValues;
-import team.zavod.di.config.StandardScope;
+import team.zavod.di.config.dependency.ConstructorArgumentValues;
 import team.zavod.di.config.GenericBeanDefinition;
-import team.zavod.di.config.PropertyValues;
-import team.zavod.di.config.ValueHolder;
+import team.zavod.di.config.dependency.PropertyValues;
+import team.zavod.di.config.dependency.ValueHolder;
 import team.zavod.di.configuration.exception.XmlConfigurationException;
-import team.zavod.di.factory.BeanDefinitionRegistry;
-import team.zavod.di.factory.SimpleBeanDefinitionRegistry;
+import team.zavod.di.factory.registry.BeanDefinitionRegistry;
+import team.zavod.di.factory.registry.SimpleBeanDefinitionRegistry;
 import team.zavod.di.util.ClasspathHelper;
 
 public class XmlConfigurationMetadata implements ConfigurationMetadata {
@@ -39,12 +36,17 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
   private static final String PROPERTY_TAG = "property";
   private static final String NAME_ATTRIBUTE = "name";
   private static final String REF_ATTRIBUTE = "ref";
-  private static final String BEAN_QUALIFIER_ATTRIBUTE = "qualifier";
+  private final ClassLoader classLoader;
   private final List<String> packagesToScan;
   private final BeanDefinitionRegistry beanDefinitionRegistry;
   private ClasspathHelper classpathHelper;
 
   public XmlConfigurationMetadata(String filename) {
+    this(filename, null);
+  }
+
+  public XmlConfigurationMetadata(String filename, ClassLoader classLoader) {
+    this.classLoader = classLoader;
     this.packagesToScan = new ArrayList<>();
     this.beanDefinitionRegistry = new SimpleBeanDefinitionRegistry();
     parseXmlConfiguration(filename);
@@ -69,7 +71,7 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
     try {
       Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(filename);
       parseBasePackages(document.getElementsByTagName(BASE_PACKAGE_TAG));
-      this.classpathHelper = new ClasspathHelper(this.packagesToScan);
+      this.classpathHelper = Objects.nonNull(this.classLoader) ? new ClasspathHelper(this.packagesToScan, this.classLoader) : new ClasspathHelper(this.packagesToScan);
       parseBeans(document.getElementsByTagName(BEAN_TAG));
     } catch (ParserConfigurationException | SAXException | IOException e) {
       throw new XmlConfigurationException("Error! Failed to read XML configuration!", e);
@@ -94,7 +96,6 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
     if (beans.getLength() == 0) {
       throw new XmlConfigurationException("Error! Failed to find beans specification!");
     }
-    Map<String, BeanDefinition> beanDefinitions = new HashMap<>();
     for (int i = 0; i < beans.getLength(); i++) {
       Element bean = (Element) beans.item(i);
       BeanDefinition beanDefinition = new GenericBeanDefinition();
@@ -102,45 +103,15 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
         throw new XmlConfigurationException("Error! Failed to find " + BEAN_NAME_ATTRIBUTE + " attribute!");
       }
       beanDefinition.setBeanName(bean.getAttribute(BEAN_NAME_ATTRIBUTE));
-      if (bean.hasAttribute(BEAN_QUALIFIER_ATTRIBUTE)) {
-        beanDefinition.setBeanClassName(bean.getAttribute(BEAN_QUALIFIER_ATTRIBUTE));
-      } else if (!bean.hasAttribute(BEAN_CLASS_NAME_ATTRIBUTE)) {
+      if (!bean.hasAttribute(BEAN_CLASS_NAME_ATTRIBUTE)) {
         throw new XmlConfigurationException("Error! Failed to find " + BEAN_CLASS_NAME_ATTRIBUTE + " for " + bean.getAttribute(BEAN_NAME_ATTRIBUTE) + "!");
-      } else beanDefinition.setBeanClassName(bean.getAttribute(BEAN_CLASS_NAME_ATTRIBUTE));
+      }
+      beanDefinition.setBeanClassName(bean.getAttribute(BEAN_CLASS_NAME_ATTRIBUTE));
       if (bean.hasAttribute(SCOPE_ATTRIBUTE)) {
-        StandardScope scope = switch (bean.getAttribute(SCOPE_ATTRIBUTE)) {
-          case "singleton" -> StandardScope.SINGLETON;
-          case "prototype" -> StandardScope.PROTOTYPE;
-          case "thread" -> StandardScope.THREAD;
-          default -> null;
-        };
-        if (Objects.isNull(scope)) {
-          throw new XmlConfigurationException("Error! Invalid " + SCOPE_ATTRIBUTE + " value!");
-        }
-        beanDefinition.setScope(scope);
+        beanDefinition.setScope(bean.getAttribute(SCOPE_ATTRIBUTE));
       }
-      if (bean.hasAttribute(LAZY_INIT_ATTRIBUTE)) {
-        Boolean lazyInit = switch(bean.getAttribute(LAZY_INIT_ATTRIBUTE)) {
-          case "true" -> Boolean.TRUE;
-          case "false" -> Boolean.FALSE;
-          default -> null;
-        };
-        if (Objects.isNull(lazyInit)) {
-          throw new XmlConfigurationException("Error! Invalid " + LAZY_INIT_ATTRIBUTE + " value!");
-        }
-        beanDefinition.setLazyInit(lazyInit);
-      }
-      if (bean.hasAttribute(PRIMARY_ATTRIBUTE)) {
-        Boolean primary = switch(bean.getAttribute(PRIMARY_ATTRIBUTE)) {
-          case "true" -> Boolean.TRUE;
-          case "false" -> Boolean.FALSE;
-          default -> null;
-        };
-        if (Objects.isNull(primary)) {
-          throw new XmlConfigurationException("Error! Invalid " + PRIMARY_ATTRIBUTE + " value!");
-        }
-        beanDefinition.setPrimary(primary);
-      }
+      parseLazyInit(bean, beanDefinition);
+      parsePrimary(bean, beanDefinition);
       if (bean.hasAttribute(FACTORY_BEAN_ATTRIBUTE)) {
         beanDefinition.setFactoryBeanName(bean.getAttribute(FACTORY_BEAN_ATTRIBUTE));
       }
@@ -155,12 +126,39 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
       }
       parseConstructorArguments(bean.getElementsByTagName(CONSTRUCTOR_ARGUMENT_TAG), beanDefinition.getConstructorArgumentValues());
       parseProperties(bean.getElementsByTagName(PROPERTY_TAG), beanDefinition.getPropertyValues());
-      if (Objects.nonNull(beanDefinitions.putIfAbsent(beanDefinition.getBeanName(), beanDefinition))) {
-        throw new XmlConfigurationException("Error! Failed to store multiple beans with the same name!");
-      }
+      this.beanDefinitionRegistry.registerBeanDefinition(beanDefinition);
     }
-    resolveBeansReferences(beanDefinitions);
-    beanDefinitions.values().forEach(this.beanDefinitionRegistry::registerBeanDefinition);
+    resolveBeansInjects();
+  }
+
+  @SuppressWarnings("DuplicatedCode")
+  private void parseLazyInit(Element bean, BeanDefinition beanDefinition) {
+    if (bean.hasAttribute(LAZY_INIT_ATTRIBUTE)) {
+      Boolean lazyInit = switch(bean.getAttribute(LAZY_INIT_ATTRIBUTE)) {
+        case "true" -> Boolean.TRUE;
+        case "false" -> Boolean.FALSE;
+        default -> null;
+      };
+      if (Objects.isNull(lazyInit)) {
+        throw new XmlConfigurationException("Error! Invalid " + LAZY_INIT_ATTRIBUTE + " value!");
+      }
+      beanDefinition.setLazyInit(lazyInit);
+    }
+  }
+
+  @SuppressWarnings("DuplicatedCode")
+  private void parsePrimary(Element bean, BeanDefinition beanDefinition) {
+    if (bean.hasAttribute(PRIMARY_ATTRIBUTE)) {
+      Boolean primary = switch(bean.getAttribute(PRIMARY_ATTRIBUTE)) {
+        case "true" -> Boolean.TRUE;
+        case "false" -> Boolean.FALSE;
+        default -> null;
+      };
+      if (Objects.isNull(primary)) {
+        throw new XmlConfigurationException("Error! Invalid " + PRIMARY_ATTRIBUTE + " value!");
+      }
+      beanDefinition.setPrimary(primary);
+    }
   }
 
   private void parseConstructorArguments(NodeList constructorArguments, ConstructorArgumentValues constructorArgumentValues) {
@@ -170,8 +168,8 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
         throw new XmlConfigurationException("Error! Failed to find " + REF_ATTRIBUTE + " attribute for " + CONSTRUCTOR_ARGUMENT_TAG + "!");
       }
       if (constructorArgument.hasAttribute(NAME_ATTRIBUTE)) {
-        constructorArgumentValues.addGenericArgumentValue(null, constructorArgument.getAttribute(REF_ATTRIBUTE), constructorArgument.getAttribute(NAME_ATTRIBUTE));
-      } else constructorArgumentValues.addIndexedArgumentValue(i, null, constructorArgument.getAttribute(REF_ATTRIBUTE));
+        constructorArgumentValues.addGenericArgumentValue(null, null, constructorArgument.getAttribute(NAME_ATTRIBUTE), constructorArgument.getAttribute(REF_ATTRIBUTE));
+      } else constructorArgumentValues.addIndexedArgumentValue(i, null, null, constructorArgument.getAttribute(REF_ATTRIBUTE));
     }
   }
 
@@ -184,38 +182,21 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
       if (!property.hasAttribute(NAME_ATTRIBUTE)) {
         throw new XmlConfigurationException("Failed to find " + NAME_ATTRIBUTE + " attribute for " + PROPERTY_TAG + "!");
       }
-      propertyValues.addPropertyValue(null, property.getAttribute(REF_ATTRIBUTE), property.getAttribute(NAME_ATTRIBUTE));
+      propertyValues.addPropertyValue(null, null, property.getAttribute(NAME_ATTRIBUTE), property.getAttribute(REF_ATTRIBUTE));
     }
   }
 
-  private void resolveBeansReferences(Map<String, BeanDefinition> beanDefinitions) {
-    for (BeanDefinition beanDefinition : beanDefinitions.values()) {
-        resolveConstructorArgumentReferences(beanDefinitions, beanDefinition.getConstructorArgumentValues().getIndexedArgumentValues(), beanDefinition.getConstructorArgumentValues().getGenericArgumentValues());
-        resolvePropertyReferences(beanDefinitions, beanDefinition.getPropertyValues().getPropertyValues());
+  @SuppressWarnings("DuplicatedCode")
+  private void resolveBeansInjects() {
+    for (String beanName : this.beanDefinitionRegistry.getBeanDefinitionNames()) {
+      BeanDefinition beanDefinition = this.beanDefinitionRegistry.getBeanDefinition(beanName);
+      beanDefinition.getConstructorArgumentValues().getIndexedArgumentValues().values().forEach(this::resolveValueHolder);
+      beanDefinition.getConstructorArgumentValues().getGenericArgumentValues().forEach(this::resolveValueHolder);
+      beanDefinition.getPropertyValues().getPropertyValues().forEach(this::resolveValueHolder);
     }
   }
 
-  private void resolveConstructorArgumentReferences(Map<String, BeanDefinition> beanDefinitions, Map<Integer, ValueHolder> indexedArgumentValues, List<ValueHolder> genericArgumentValues) {
-    for (ValueHolder valueHolder : indexedArgumentValues.values()) {
-      if (!beanDefinitions.containsKey(valueHolder.getType())) {
-        throw new XmlConfigurationException("Error! Failed to resolve reference for " + valueHolder.getType() + " bean!");
-      }
-      valueHolder.setType(beanDefinitions.get(valueHolder.getType()).getBeanClassName());
-    }
-    for (ValueHolder valueHolder : genericArgumentValues) {
-      if (!beanDefinitions.containsKey(valueHolder.getType())) {
-        throw new XmlConfigurationException("Error! Failed to resolve reference for " + valueHolder.getType() + " bean!");
-      }
-      valueHolder.setType(beanDefinitions.get(valueHolder.getType()).getBeanClassName());
-    }
-  }
-
-  private void resolvePropertyReferences(Map<String, BeanDefinition> beanDefinitions, List<ValueHolder> propertyValues) {
-    for (ValueHolder valueHolder : propertyValues) {
-      if (!beanDefinitions.containsKey(valueHolder.getType())) {
-        throw new XmlConfigurationException("Error! Failed to resolve reference for " + valueHolder.getType() + " bean!");
-      }
-      valueHolder.setType(beanDefinitions.get(valueHolder.getType()).getBeanClassName());
-    }
+  private void resolveValueHolder(ValueHolder valueHolder) {
+    valueHolder.setType(this.beanDefinitionRegistry.getBeanDefinition(valueHolder.getBeanName()).getBeanClassName());
   }
 }

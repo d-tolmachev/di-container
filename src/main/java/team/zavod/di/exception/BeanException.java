@@ -1,6 +1,6 @@
 package team.zavod.di.exception;
 
-public abstract class BeanException extends RuntimeException {
+public class BeanException extends RuntimeException {
   public BeanException() {
     super();
   }

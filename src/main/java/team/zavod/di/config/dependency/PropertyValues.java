@@ -1,7 +1,8 @@
-package team.zavod.di.config;
+package team.zavod.di.config.dependency;
 
 import java.util.ArrayList;
 import java.util.List;
+import team.zavod.di.factory.ObjectProvider;
 
 public class PropertyValues {
   private final List<ValueHolder> propertyValues;
@@ -18,8 +19,8 @@ public class PropertyValues {
     return this.propertyValues.stream().anyMatch(value -> value.getName().equals(name));
   }
 
-  public void addPropertyValue(Object value, String type, String name) {
-    addPropertyValue(new ValueHolder(value, type, name));
+  public void addPropertyValue(ObjectProvider<?> valueProvider, String type, String name, String beanName) {
+    addPropertyValue(new ValueHolder(valueProvider, type, name, beanName));
   }
 
   public void addPropertyValue(ValueHolder newValue) {
@@ -30,9 +31,9 @@ public class PropertyValues {
     this.propertyValues.removeIf(value -> value.getName().equals(name));
   }
 
-  public ValueHolder getPropertyValue(String requiredType, String requiredName) {
+  public ValueHolder getPropertyValue(String name) {
     return this.propertyValues.stream()
-        .filter(value -> value.getType().equals(requiredType) && value.getName().equals(requiredName))
+        .filter(value -> value.getName().equals(name))
         .findFirst().orElse(null);
   }
 
@@ -42,6 +43,10 @@ public class PropertyValues {
 
   public boolean isEmpty() {
     return this.propertyValues.isEmpty();
+  }
+
+  public int size() {
+    return this.propertyValues.size();
   }
 
   public void clear() {

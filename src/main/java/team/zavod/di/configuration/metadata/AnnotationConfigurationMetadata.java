@@ -3,18 +3,16 @@ package team.zavod.di.configuration.metadata;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import jakarta.inject.Inject;
+import jakarta.inject.Named;
 import jakarta.ws.rs.ext.Provider;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -22,15 +20,15 @@ import team.zavod.di.annotation.Autowired;
 import team.zavod.di.annotation.Component;
 import team.zavod.di.annotation.Lazy;
 import team.zavod.di.annotation.Primary;
-import team.zavod.di.annotation.Qualifier;
 import team.zavod.di.annotation.Scope;
 import team.zavod.di.config.BeanDefinition;
-import team.zavod.di.config.ConstructorArgumentValues;
+import team.zavod.di.config.dependency.ConstructorArgumentValues;
 import team.zavod.di.config.GenericBeanDefinition;
-import team.zavod.di.config.PropertyValues;
+import team.zavod.di.config.dependency.PropertyValues;
+import team.zavod.di.config.dependency.ValueHolder;
 import team.zavod.di.configuration.exception.AnnotationConfigurationException;
-import team.zavod.di.factory.BeanDefinitionRegistry;
-import team.zavod.di.factory.SimpleBeanDefinitionRegistry;
+import team.zavod.di.factory.registry.BeanDefinitionRegistry;
+import team.zavod.di.factory.registry.SimpleBeanDefinitionRegistry;
 import team.zavod.di.util.ClasspathHelper;
 
 public class AnnotationConfigurationMetadata implements ConfigurationMetadata {
@@ -42,13 +40,19 @@ public class AnnotationConfigurationMetadata implements ConfigurationMetadata {
   private static final Class<PostConstruct> POST_CONSTRUCT_ANNOTATION = PostConstruct.class;
   private static final Class<PreDestroy> PRE_DESTROY_ANNOTATION = PreDestroy.class;
   private static final List<Class<? extends Annotation>> AUTOWIRED_ANNOTATIONS = List.of(Autowired.class, Inject.class);
-  private static final Class<Qualifier> QUALIFIER_ANNOTATION = Qualifier.class;
+  private static final Class<Named> NAMED_ANNOTATION = Named.class;
+  private final ClassLoader classLoader;
   private final List<String> packagesToScan;
   private final BeanDefinitionRegistry beanDefinitionRegistry;
   private ClasspathHelper classpathHelper;
 
-  public AnnotationConfigurationMetadata(List<String> basePackages) {
-    this.packagesToScan = new ArrayList<>(basePackages);
+  public AnnotationConfigurationMetadata(String[] basePackages) {
+    this(basePackages, null);
+  }
+
+  public AnnotationConfigurationMetadata(String[] basePackages, ClassLoader classLoader) {
+    this.classLoader = classLoader;
+    this.packagesToScan = Arrays.asList(basePackages);
     this.beanDefinitionRegistry = new SimpleBeanDefinitionRegistry();
     parseAnnotationConfiguration();
   }
@@ -69,13 +73,12 @@ public class AnnotationConfigurationMetadata implements ConfigurationMetadata {
   }
 
   private void parseAnnotationConfiguration() {
-    this.classpathHelper = new ClasspathHelper(this.packagesToScan);
+    this.classpathHelper = Objects.nonNull(this.classLoader) ? new ClasspathHelper(this.packagesToScan, this.classLoader) : new ClasspathHelper(this.packagesToScan);
     parseComponents(this.classpathHelper.getTypesAnnotatedWith(COMPONENT_ANNOTATION));
   }
 
   @SuppressWarnings("DuplicatedCode")
   private void parseComponents(Set<Class<?>> componentClasses) {
-    Map<String, Set<BeanDefinition>> beanDefinitions = new HashMap<>();
     for (Class<?> componentClass : componentClasses) {
       Component component = componentClass.getAnnotation(COMPONENT_ANNOTATION);
       String beanName = !component.value().isEmpty() ? component.value() : generateBeanName(componentClass.getSimpleName());
@@ -98,12 +101,10 @@ public class AnnotationConfigurationMetadata implements ConfigurationMetadata {
       parseInit(componentClass, beanDefinition);
       parseDestroy(componentClass, beanDefinition);
       parseInjects(componentClass, beanDefinition.getConstructorArgumentValues(), beanDefinition.getPropertyValues());
-      if (!beanDefinitions.computeIfAbsent(beanDefinition.getBeanClassName(), k -> new HashSet<>()).add(beanDefinition)) {
-        throw new AnnotationConfigurationException("Error! Failed to store multiple beans with the same name!");
-      }
+      this.beanDefinitionRegistry.registerBeanDefinition(beanDefinition);
     }
-    resolveBeansProviders(beanDefinitions);
-    beanDefinitions.values().forEach(classBeanDefinitions -> classBeanDefinitions.forEach(this.beanDefinitionRegistry::registerBeanDefinition));
+    resolveBeansProviders();
+    resolveBeansInjects();
   }
 
   private void parseProvider(Class<?> componentClass, BeanDefinition beanDefinition) {
@@ -149,35 +150,55 @@ public class AnnotationConfigurationMetadata implements ConfigurationMetadata {
 
   private void parseConstructorArguments(Parameter[] parameters, ConstructorArgumentValues constructorArgumentValues) {
     for (int i = 0; i < parameters.length; i++) {
-      Qualifier qualifier = parameters[i].getAnnotation(QUALIFIER_ANNOTATION);
-      Class<?> type = Objects.nonNull(qualifier) ? qualifier.value() : parameters[i].getType();
+      Named named = parameters[i].getAnnotation(NAMED_ANNOTATION);
+      String type = parameters[i].getType().getName();
+      String beanName = Objects.nonNull(named) ? named.value() : null;
       if (parameters[i].isNamePresent()) {
-        constructorArgumentValues.addGenericArgumentValue(null, type.getName(), parameters[i].getName());
-      } else constructorArgumentValues.addIndexedArgumentValue(i, null, type.getName());
+        constructorArgumentValues.addGenericArgumentValue(null, type, parameters[i].getName(), beanName);
+      } else constructorArgumentValues.addIndexedArgumentValue(i, null, type, beanName);
     }
   }
 
   private void parseProperties(Set<Field> fields, PropertyValues propertyValues) {
     for (Field field : fields) {
-      Qualifier qualifier = field.getAnnotation(QUALIFIER_ANNOTATION);
-      Class<?> type = Objects.nonNull(qualifier) ? qualifier.value() : field.getType();
-      propertyValues.addPropertyValue(null, type.getName(), field.getName());
+      Named named = field.getAnnotation(NAMED_ANNOTATION);
+      String type = field.getType().getName();
+      String beanName = Objects.nonNull(named) ? named.value() : null;
+      propertyValues.addPropertyValue(null, type, field.getName(), beanName);
     }
   }
 
-  private void resolveBeansProviders(Map<String, Set<BeanDefinition>> beanDefinitions) {
-    for (Set<BeanDefinition> classBeanDefinitions : beanDefinitions.values()) {
-      for (BeanDefinition beanDefinition : classBeanDefinitions) {
-        String factoryBeanClassName = beanDefinition.getFactoryBeanName();
-        if (Objects.nonNull(factoryBeanClassName)) {
-          Set<BeanDefinition> factoryBeanDefinitions = beanDefinitions.get(factoryBeanClassName);
-          if (factoryBeanDefinitions.size() > 1) {
-            throw new AnnotationConfigurationException("Error! Failed to unambiguously determine factory bean for " + beanDefinition.getBeanName() + " bean!");
-          } else if (!factoryBeanDefinitions.isEmpty()) {
-            beanDefinition.setFactoryBeanName(factoryBeanDefinitions.iterator().next().getBeanName());
-          } else throw new AnnotationConfigurationException("Error! Failed to find factory bean for " + beanDefinition.getBeanName() + " bean!");
-        }
+  private void resolveBeansProviders() {
+    for (String beanName : this.beanDefinitionRegistry.getBeanDefinitionNames()) {
+      BeanDefinition beanDefinition = this.beanDefinitionRegistry.getBeanDefinition(beanName);
+      String factoryBeanClassName = beanDefinition.getFactoryBeanName();
+      if (Objects.nonNull(factoryBeanClassName)) {
+        Set<BeanDefinition> factoryBeanDefinitions = this.beanDefinitionRegistry.getBeanDefinitions(factoryBeanClassName);
+        if (factoryBeanDefinitions.size() > 1) {
+          throw new AnnotationConfigurationException("Error! Failed to unambiguously determine factory bean for " + beanDefinition.getBeanName() + " bean!");
+        } else if (!factoryBeanDefinitions.isEmpty()) {
+          beanDefinition.setFactoryBeanName(factoryBeanDefinitions.iterator().next().getBeanName());
+        } else throw new AnnotationConfigurationException("Error! Failed to find factory bean for " + beanDefinition.getBeanName() + " bean!");
       }
+    }
+  }
+
+  @SuppressWarnings("DuplicatedCode")
+  private void resolveBeansInjects() {
+    for (String beanName : this.beanDefinitionRegistry.getBeanDefinitionNames()) {
+      BeanDefinition beanDefinition = this.beanDefinitionRegistry.getBeanDefinition(beanName);
+      beanDefinition.getConstructorArgumentValues().getIndexedArgumentValues().values().forEach(this::resolveValueHolder);
+      beanDefinition.getConstructorArgumentValues().getGenericArgumentValues().forEach(this::resolveValueHolder);
+      beanDefinition.getPropertyValues().getPropertyValues().forEach(this::resolveValueHolder);
+    }
+  }
+
+  private void resolveValueHolder(ValueHolder valueHolder) {
+    if (Objects.isNull(valueHolder.getBeanName())) {
+      Set<BeanDefinition> beanDefinitions = this.beanDefinitionRegistry.getBeanDefinitions(valueHolder.getType());
+      if (beanDefinitions.size() > 1) {
+        throw new AnnotationConfigurationException("Error! Failed to unambiguously determine bean for " + valueHolder.getType() + " class!");
+      } else valueHolder.setBeanName(beanDefinitions.iterator().next().getBeanName());
     }
   }
 

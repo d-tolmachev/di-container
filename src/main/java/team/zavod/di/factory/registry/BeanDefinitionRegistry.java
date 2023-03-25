@@ -1,5 +1,6 @@
-package team.zavod.di.factory;
+package team.zavod.di.factory.registry;
 
+import java.util.List;
 import java.util.Set;
 import team.zavod.di.config.BeanDefinition;
 import team.zavod.di.factory.exception.BeanDefinitionStoreException;
@@ -15,4 +16,6 @@ public interface BeanDefinitionRegistry {
   BeanDefinition getBeanDefinition(String bean) throws NoSuchBeanDefinitionException;
 
   Set<BeanDefinition> getBeanDefinitions(String beanClassName) throws NoSuchBeanDefinitionException;
+
+  List<String> getBeanDefinitionNames();
 }

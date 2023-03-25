@@ -1,5 +1,6 @@
-package team.zavod.di.factory;
+package team.zavod.di.factory.registry;
 
+import java.util.List;
 import java.util.Set;
 import team.zavod.di.factory.exception.BeanStoreException;
 import team.zavod.di.factory.exception.NoSuchBeanException;
@@ -18,4 +19,6 @@ public interface SingletonBeanRegistry {
   Object getSingleton(String beanName) throws NoSuchBeanException;
 
   Set<Object> getSingletons(Class<?> beanType) throws NoSuchBeanException;
+
+  List<String> getSingletonNames();
 }

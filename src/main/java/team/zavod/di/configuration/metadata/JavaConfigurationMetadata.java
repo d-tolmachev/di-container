@@ -4,6 +4,7 @@ import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import team.zavod.di.annotation.Bean;
 import team.zavod.di.annotation.BasePackages;
@@ -14,8 +15,8 @@ import team.zavod.di.annotation.Scope;
 import team.zavod.di.config.BeanDefinition;
 import team.zavod.di.config.GenericBeanDefinition;
 import team.zavod.di.configuration.exception.JavaConfigurationException;
-import team.zavod.di.factory.BeanDefinitionRegistry;
-import team.zavod.di.factory.SimpleBeanDefinitionRegistry;
+import team.zavod.di.factory.registry.BeanDefinitionRegistry;
+import team.zavod.di.factory.registry.SimpleBeanDefinitionRegistry;
 import team.zavod.di.util.ClasspathHelper;
 
 public class JavaConfigurationMetadata implements ConfigurationMetadata {
@@ -25,11 +26,17 @@ public class JavaConfigurationMetadata implements ConfigurationMetadata {
   private static final Class<Scope> SCOPE_ANNOTATION = Scope.class;
   private static final Class<Lazy> LAZY_ANNOTATION = Lazy.class;
   private static final Class<Primary> PRIMARY_ANNOTATION = Primary.class;
+  private final ClassLoader classLoader;
   private final List<String> packagesToScan;
   private final BeanDefinitionRegistry beanDefinitionRegistry;
   private ClasspathHelper classpathHelper;
 
   public JavaConfigurationMetadata(Class<?> configurationClass) {
+    this(configurationClass, null);
+  }
+
+  public JavaConfigurationMetadata(Class<?> configurationClass, ClassLoader classLoader) {
+    this.classLoader = classLoader;
     this.packagesToScan = new ArrayList<>();
     this.beanDefinitionRegistry = new SimpleBeanDefinitionRegistry();
     parseJavaConfiguration(configurationClass);
@@ -52,7 +59,7 @@ public class JavaConfigurationMetadata implements ConfigurationMetadata {
 
   private void parseJavaConfiguration(Class<?> configurationClass) {
     parseBasePackages(configurationClass);
-    this.classpathHelper = new ClasspathHelper(this.packagesToScan);
+    this.classpathHelper = Objects.nonNull(this.classLoader) ? new ClasspathHelper(this.packagesToScan, this.classLoader) : new ClasspathHelper(this.packagesToScan);
     parseConfigurationClasses(this.classpathHelper.getTypesAnnotatedWith(CONFIGURATION_ANNOTATION));
   }
 

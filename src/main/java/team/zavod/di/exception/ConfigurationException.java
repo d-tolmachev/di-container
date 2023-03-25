@@ -1,6 +1,6 @@
 package team.zavod.di.exception;
 
-public abstract class ConfigurationException extends RuntimeException {
+public class ConfigurationException extends RuntimeException {
   public ConfigurationException() {
     super();
   }

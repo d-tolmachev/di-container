@@ -1,9 +1,10 @@
-package team.zavod.di.config;
+package team.zavod.di.config.dependency;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import team.zavod.di.factory.ObjectProvider;
 
 public class ConstructorArgumentValues {
   private final Map<Integer, ValueHolder> indexedArgumentValues;
@@ -33,8 +34,8 @@ public class ConstructorArgumentValues {
     return this.indexedArgumentValues.containsKey(index);
   }
 
-  public void addIndexedArgumentValue(int index, Object value, String type) {
-    addIndexedArgumentValue(index, new ValueHolder(value, type, null));
+  public void addIndexedArgumentValue(int index, ObjectProvider<?> valueProvider, String type, String beanName) {
+    addIndexedArgumentValue(index, new ValueHolder(valueProvider, type, null, beanName));
   }
 
   public void addIndexedArgumentValue(int index, ValueHolder newValue) {
@@ -57,8 +58,8 @@ public class ConstructorArgumentValues {
     return this.genericArgumentValues.stream().anyMatch(value -> value.getName().equals(name));
   }
 
-  public void addGenericArgumentValue(Object value, String type, String name) {
-    addGenericArgumentValue(new ValueHolder(value, type, name));
+  public void addGenericArgumentValue(ObjectProvider<?> valueProvider, String type, String name, String beanName) {
+    addGenericArgumentValue(new ValueHolder(valueProvider, type, name, beanName));
   }
 
   public void addGenericArgumentValue(ValueHolder newValue) {
@@ -69,9 +70,9 @@ public class ConstructorArgumentValues {
     this.genericArgumentValues.removeIf(value -> value.getName().equals(name));
   }
 
-  public ValueHolder getGenericArgumentValue(String requiredType, String requiredName) {
+  public ValueHolder getGenericArgumentValue(String name) {
     return this.genericArgumentValues.stream()
-        .filter(value -> value.getType().equals(requiredType) && value.getName().equals(requiredName))
+        .filter(value -> value.getName().equals(name))
         .findFirst().orElse(null);
   }
 
@@ -79,12 +80,16 @@ public class ConstructorArgumentValues {
     return this.genericArgumentValues;
   }
 
-  public ValueHolder getArgumentValue(int index, String requiredType, String requiredName) {
-    return hasIndexedArgumentValue(index) ? getIndexedArgumentValue(index) : getGenericArgumentValue(requiredType, requiredName);
+  public ValueHolder getArgumentValue(int index, String name) {
+    return hasIndexedArgumentValue(index) ? getIndexedArgumentValue(index) : getGenericArgumentValue(name);
   }
 
   public boolean isEmpty() {
     return this.indexedArgumentValues.isEmpty() && this.genericArgumentValues.isEmpty();
+  }
+
+  public int size() {
+    return this.indexedArgumentValues.size() + this.genericArgumentValues.size();
   }
 
   public void clear() {

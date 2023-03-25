@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+  <base-packages>
+    <base-package>team.zavod.di.service</base-package>
+  </base-packages>
+  <beans>
+    <bean id="paymentSystem" class="team.zavod.di.service.interfaces.PaymentSystem"/>
+    <bean id="service" class="team.zavod.di.service.Service">
+      <constructor-arg ref="paymentSystem"/>
+    </bean>
+  </beans>
+</configuration>

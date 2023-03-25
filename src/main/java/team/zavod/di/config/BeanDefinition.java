@@ -1,5 +1,8 @@
 package team.zavod.di.config;
 
+import team.zavod.di.config.dependency.ConstructorArgumentValues;
+import team.zavod.di.config.dependency.PropertyValues;
+
 public interface BeanDefinition {
   String getBeanName();
 
@@ -9,9 +12,9 @@ public interface BeanDefinition {
 
   void setBeanClassName(String beanClassName);
 
-  StandardScope getScope();
+  String getScope();
 
-  void setScope(StandardScope scope);
+  void setScope(String scope);
 
   boolean isLazyInit();
 
@@ -40,6 +43,8 @@ public interface BeanDefinition {
   boolean isSingleton();
 
   boolean isPrototype();
+
+  boolean isThread();
 
   boolean hasConstructorArgumentValues();
 

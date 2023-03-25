@@ -50,7 +50,7 @@ public class ClasspathHelper {
       "void", "V");
   private final Map<String, Set<String>> typesToSubTypes;
   private final Map<String, Set<String>> annotationsToTypes;
-  private final List<ClassLoader> classLoaders;
+  private final Set<ClassLoader> classLoaders;
   private final Map<URI, String> uriToRelativePath;
 
   public ClasspathHelper(String name) {
@@ -60,10 +60,40 @@ public class ClasspathHelper {
   public ClasspathHelper(List<String> names) {
     this.typesToSubTypes = new HashMap<>();
     this.annotationsToTypes = new HashMap<>();
-    this.classLoaders = getDefaultClassLoaders();
+    this.classLoaders = new HashSet<>();
     this.uriToRelativePath = new HashMap<>();
+    this.classLoaders.add(getDefaultClassLoader());
     names.forEach(this::setUrlsForPackage);
     scan();
+  }
+
+  public ClasspathHelper(String name, ClassLoader classLoader) {
+    this(name);
+    this.classLoaders.add(classLoader);
+  }
+
+  public ClasspathHelper(List<String> names, ClassLoader classLoader) {
+    this(names);
+    this.classLoaders.add(classLoader);
+  }
+
+  public Class<?> classForName(String typeName) {
+    if (PRIMITIVE_NAMES_TO_TYPES.containsKey(typeName)) {
+      return PRIMITIVE_NAMES_TO_TYPES.get(typeName);
+    }
+    String type;
+    if (typeName.contains("[")) {
+      type = typeName.substring(0, typeName.indexOf("["));
+      type = PRIMITIVE_NAMES_TO_DESCRIPTORS.getOrDefault(type, "L" + type);
+      type = typeName.substring(typeName.indexOf("[")).replace("]", "") + type;
+    } else type = typeName;
+    for (ClassLoader classLoader : this.classLoaders) {
+      try {
+        return Class.forName(type, false, classLoader);
+      } catch (ClassNotFoundException ignored) {
+      }
+    }
+    return null;
   }
 
   public <T> Set<Class<? extends T>> getSubTypesOf(Class<T> type) {
@@ -74,8 +104,8 @@ public class ClasspathHelper {
     return Set.copyOf(listClassesForNames(getTypesAnnotatedWith(annotation.getName())));
   }
 
-  private List<ClassLoader> getDefaultClassLoaders() {
-    return List.of(Thread.currentThread().getContextClassLoader(), getClass().getClassLoader());
+  private ClassLoader getDefaultClassLoader() {
+    return Thread.currentThread().getContextClassLoader();
   }
 
   private void setUrlsForPackage(String name) {
@@ -141,9 +171,6 @@ public class ClasspathHelper {
     Set<String> types = new HashSet<>();
     if (this.annotationsToTypes.containsKey(annotation)) {
       types.addAll(this.annotationsToTypes.get(annotation));
-      this.annotationsToTypes.get(annotation).stream()
-          .filter(this.typesToSubTypes::containsKey)
-          .forEach(type -> types.addAll(getSubTypesOf(type)));
     }
     return types;
   }
@@ -188,24 +215,5 @@ public class ClasspathHelper {
       Arrays.stream(annotationsAttribute.getAnnotations()).forEach(annotation -> annotations.add(annotation.getTypeName()));
     }
     return annotations;
-  }
-
-  private Class<?> classForName(String typeName) {
-    if (PRIMITIVE_NAMES_TO_TYPES.containsKey(typeName)) {
-      return PRIMITIVE_NAMES_TO_TYPES.get(typeName);
-    }
-    String type;
-    if (typeName.contains("[")) {
-      type = typeName.substring(0, typeName.indexOf("["));
-      type = PRIMITIVE_NAMES_TO_DESCRIPTORS.getOrDefault(type, "L" + type);
-      type = typeName.substring(typeName.indexOf("[")).replace("]", "") + type;
-    } else type = typeName;
-    for (ClassLoader classLoader : this.classLoaders) {
-      try {
-        return Class.forName(type, false, classLoader);
-      } catch (ClassNotFoundException ignored) {
-      }
-    }
-    return null;
   }
 }
