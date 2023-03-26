@@ -235,11 +235,7 @@ public class DefaultBeanFactory implements BeanFactory {
   }
 
   private <T> ObjectProvider<T> getProvider(BeanDefinition beanDefinition) {
-    return () -> {
-      T bean = Objects.isNull(beanDefinition.getFactoryBeanName()) ? constructBean(beanDefinition) : provideBean(beanDefinition);
-      this.beanPostProcessors.forEach(beanPostProcessor -> beanPostProcessor.postProcessAfterInitialization(bean, beanDefinition.getBeanName()));
-      return bean;
-    };
+    return () -> Objects.isNull(beanDefinition.getFactoryBeanName()) ? constructBean(beanDefinition) : provideBean(beanDefinition);
   }
 
   private <T> void processInitialization(BeanDefinition beanDefinition, T bean) {
@@ -252,6 +248,7 @@ public class DefaultBeanFactory implements BeanFactory {
           fieldProvider.getKey().set(bean, fieldProvider.getValue().getObject());
         }
       }
+      this.beanPostProcessors.forEach(beanPostProcessor -> beanPostProcessor.postProcessAfterInitialization(bean, beanDefinition.getBeanName()));
     } catch (IllegalAccessException e) {
       throw new BeanException("Error! Failed to initialize dependencies for " + beanDefinition.getBeanName() + " bean!");
     }
@@ -283,8 +280,9 @@ public class DefaultBeanFactory implements BeanFactory {
   @SuppressWarnings("unchecked")
   private <T> T provideBean(BeanDefinition beanDefinition) {
     try {
-      Object factoryBean = getBean(beanDefinition.getFactoryBeanName(), this.classpathHelper.classForName(getBeanDefinition(beanDefinition.getFactoryBeanName()).getBeanClassName()));
-      Method factoryMethod = factoryBean.getClass().getDeclaredMethod(beanDefinition.getFactoryMethodName());
+      Class<?> beanClass = this.classpathHelper.classForName(getBeanDefinition(beanDefinition.getFactoryBeanName()).getBeanClassName());
+      Object factoryBean = getBean(beanDefinition.getFactoryBeanName(), beanClass);
+      Method factoryMethod = beanClass.getDeclaredMethod(beanDefinition.getFactoryMethodName());
       factoryMethod.setAccessible(true);
       return (T) factoryMethod.invoke(factoryBean);
     } catch (NoSuchMethodException | IllegalAccessException | InvocationTargetException e) {
