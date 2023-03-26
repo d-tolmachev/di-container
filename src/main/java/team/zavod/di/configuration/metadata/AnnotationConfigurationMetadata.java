@@ -25,7 +25,6 @@ import team.zavod.di.config.BeanDefinition;
 import team.zavod.di.config.dependency.ConstructorArgumentValues;
 import team.zavod.di.config.GenericBeanDefinition;
 import team.zavod.di.config.dependency.PropertyValues;
-import team.zavod.di.config.dependency.ValueHolder;
 import team.zavod.di.configuration.exception.AnnotationConfigurationException;
 import team.zavod.di.factory.registry.BeanDefinitionRegistry;
 import team.zavod.di.factory.registry.SimpleBeanDefinitionRegistry;
@@ -104,7 +103,6 @@ public class AnnotationConfigurationMetadata implements ConfigurationMetadata {
       this.beanDefinitionRegistry.registerBeanDefinition(beanDefinition);
     }
     resolveBeansProviders();
-    resolveBeansInjects();
   }
 
   private void parseProvider(Class<?> componentClass, BeanDefinition beanDefinition) {
@@ -177,28 +175,13 @@ public class AnnotationConfigurationMetadata implements ConfigurationMetadata {
         if (factoryBeanDefinitions.size() > 1) {
           throw new AnnotationConfigurationException("Error! Failed to unambiguously determine factory bean for " + beanDefinition.getBeanName() + " bean!");
         } else if (!factoryBeanDefinitions.isEmpty()) {
-          beanDefinition.setFactoryBeanName(factoryBeanDefinitions.iterator().next().getBeanName());
+          BeanDefinition factoryBeanDefinition = factoryBeanDefinitions.iterator().next();
+          factoryBeanDefinition.setFactoryBeanName(beanDefinition.getBeanClassName());
+          beanDefinition.setFactoryBeanName(null);
+          factoryBeanDefinition.setFactoryMethodName(beanDefinition.getFactoryMethodName());
+          beanDefinition.setFactoryMethodName(null);
         } else throw new AnnotationConfigurationException("Error! Failed to find factory bean for " + beanDefinition.getBeanName() + " bean!");
       }
-    }
-  }
-
-  @SuppressWarnings("DuplicatedCode")
-  private void resolveBeansInjects() {
-    for (String beanName : this.beanDefinitionRegistry.getBeanDefinitionNames()) {
-      BeanDefinition beanDefinition = this.beanDefinitionRegistry.getBeanDefinition(beanName);
-      beanDefinition.getConstructorArgumentValues().getIndexedArgumentValues().values().forEach(this::resolveValueHolder);
-      beanDefinition.getConstructorArgumentValues().getGenericArgumentValues().forEach(this::resolveValueHolder);
-      beanDefinition.getPropertyValues().getPropertyValues().forEach(this::resolveValueHolder);
-    }
-  }
-
-  private void resolveValueHolder(ValueHolder valueHolder) {
-    if (Objects.isNull(valueHolder.getBeanName())) {
-      Set<BeanDefinition> beanDefinitions = this.beanDefinitionRegistry.getBeanDefinitions(valueHolder.getType());
-      if (beanDefinitions.size() > 1) {
-        throw new AnnotationConfigurationException("Error! Failed to unambiguously determine bean for " + valueHolder.getType() + " class!");
-      } else valueHolder.setBeanName(beanDefinitions.iterator().next().getBeanName());
     }
   }
 

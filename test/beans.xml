@@ -4,7 +4,7 @@
     <base-package>team.zavod.di.service</base-package>
   </base-packages>
   <beans>
-    <bean id="paymentSystem" class="team.zavod.di.service.interfaces.PaymentSystem"/>
+    <bean id="paymentSystem" class="team.zavod.di.service.impl.CardPaymentSystem"/>
     <bean id="service" class="team.zavod.di.service.Service">
       <constructor-arg ref="paymentSystem"/>
     </bean>

@@ -28,7 +28,7 @@ public class GenericBeanConfigurator implements BeanConfigurator {
   public <T> Class<? extends T> getImplementationClass(Class<T> requiredType) throws NoSuchBeanException {
     if (!this.interfacesToImplementations.containsKey(requiredType)) {
       Set<Class<? extends T>> implementationClasses = this.classpathHelper.getSubTypesOf(requiredType).stream()
-          .filter(subType -> this.configurationMetadata.getPackagesToScan().stream().anyMatch(packageToScan -> subType.getPackageName().startsWith(packageToScan)))
+          .filter(subType -> this.beanDefinitionRegistry.containsBeanDefinition(subType.getName()))
           .collect(Collectors.toSet());
       if (implementationClasses.size() > 1) {
         throw new NoUniqueBeanException("Error! " + requiredType.getName() + " has more than 1 implementations!");
