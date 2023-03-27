@@ -1,7 +1,13 @@
 package team.zavod.di.config;
 
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import team.zavod.di.config.dependency.ConstructorArgumentValues;
+import team.zavod.di.config.dependency.MethodArgumentValues;
 import team.zavod.di.config.dependency.PropertyValues;
 import team.zavod.di.config.scope.PrototypeScope;
 import team.zavod.di.config.scope.SingletonScope;
@@ -19,13 +25,15 @@ public class GenericBeanDefinition implements BeanDefinition {
   private String destroyMethodName;
   private ConstructorArgumentValues constructorArgumentValues;
   private PropertyValues propertyValues;
+  private final Map<String, Set<MethodArgumentValues>> methodArgumentValues;
 
   public GenericBeanDefinition() {
     this.scope = SingletonScope.getName();
-    this.lazyInit = true;
+    this.lazyInit = false;
     this.primary = false;
     this.constructorArgumentValues = new ConstructorArgumentValues();
     this.propertyValues = new PropertyValues();
+    this.methodArgumentValues = new HashMap<>();
   }
 
   @Override
@@ -161,5 +169,25 @@ public class GenericBeanDefinition implements BeanDefinition {
   @Override
   public void setPropertyValues(PropertyValues propertyValues) {
     this.propertyValues = propertyValues;
+  }
+
+  @Override
+  public boolean hasMethodArgumentValues(String methodName) {
+    return this.methodArgumentValues.containsKey(methodName) && !this.methodArgumentValues.get(methodName).isEmpty() && !this.methodArgumentValues.get(methodName).iterator().next().isEmpty();
+  }
+
+  @Override
+  public Set<MethodArgumentValues> getMethodArgumentValues(String methodName) {
+    return this.methodArgumentValues.get(methodName);
+  }
+
+  @Override
+  public void addMethodArgumentValues(String methodName, MethodArgumentValues methodArgumentValues) {
+    this.methodArgumentValues.computeIfAbsent(methodName, k -> new HashSet<>()).add(methodArgumentValues);
+  }
+
+  @Override
+  public List<String> getMethodNames() {
+    return List.copyOf(this.methodArgumentValues.keySet());
   }
 }

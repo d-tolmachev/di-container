@@ -90,14 +90,23 @@ public class JavaConfigurationMetadata implements ConfigurationMetadata {
     }
   }
 
-  @SuppressWarnings("DuplicatedCode")
+  @SuppressWarnings({"DuplicatedCode", "unchecked"})
   private void parseBeans(List<Method> methods) {
     for (Method method : methods) {
       Bean bean = method.getAnnotation(BEAN_ANNOTATION);
       String beanName = !bean.name().isEmpty() ? bean.name() : method.getName();
       BeanDefinition beanDefinition = new GenericBeanDefinition();
       beanDefinition.setBeanName(beanName);
-      beanDefinition.setBeanClassName(method.getReturnType().getName());
+      Class<?> beanClass = method.getReturnType();
+      if (beanClass.isInterface()) {
+        Set<Class<?>> subTypes = (Set<Class<?>>) this.classpathHelper.getSubTypesOf(beanClass);
+        if (subTypes.size() > 1) {
+          throw new JavaConfigurationException("Error! " + beanClass.getName() + " has more than one implementations!");
+        } else if (!subTypes.isEmpty()) {
+          beanClass = subTypes.iterator().next();
+        } else throw new JavaConfigurationException("Error! " + beanClass.getName() + " has no implementations!");
+      }
+      beanDefinition.setBeanClassName(beanClass.getName());
       if (method.isAnnotationPresent(SCOPE_ANNOTATION)) {
         Scope scope = method.getAnnotation(SCOPE_ANNOTATION);
         beanDefinition.setScope(scope.value());

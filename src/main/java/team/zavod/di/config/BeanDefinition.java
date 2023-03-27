@@ -1,6 +1,9 @@
 package team.zavod.di.config;
 
+import java.util.List;
+import java.util.Set;
 import team.zavod.di.config.dependency.ConstructorArgumentValues;
+import team.zavod.di.config.dependency.MethodArgumentValues;
 import team.zavod.di.config.dependency.PropertyValues;
 
 public interface BeanDefinition {
@@ -57,4 +60,12 @@ public interface BeanDefinition {
   PropertyValues getPropertyValues();
 
   void setPropertyValues(PropertyValues propertyValues);
+
+  boolean hasMethodArgumentValues(String methodName);
+
+  Set<MethodArgumentValues> getMethodArgumentValues(String methodName);
+
+  void addMethodArgumentValues(String methodName, MethodArgumentValues methodArgumentValues);
+
+  List<String> getMethodNames();
 }

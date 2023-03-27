@@ -16,7 +16,13 @@ import java.util.Map.Entry;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import net.bytebuddy.ByteBuddy;
+import net.bytebuddy.dynamic.DynamicType.Builder;
+import net.bytebuddy.implementation.MethodCall;
+import net.bytebuddy.matcher.ElementMatchers;
 import team.zavod.di.config.BeanDefinition;
+import team.zavod.di.config.dependency.ArgumentValues;
+import team.zavod.di.config.dependency.MethodArgumentValues;
 import team.zavod.di.config.postprocessor.BeanPostProcessor;
 import team.zavod.di.config.dependency.ConstructorArgumentValues;
 import team.zavod.di.config.postprocessor.DestructionAwareBeanPostProcessor;
@@ -41,7 +47,9 @@ import team.zavod.di.factory.registry.BeanDefinitionRegistry;
 import team.zavod.di.util.ClasspathHelper;
 
 public class DefaultBeanFactory implements BeanFactory {
+  private final Map<String, Set<BeanDefinition>> beanProviders;
   private final Set<BeanDefinition> dependencyContext;
+  private final Map<String, Class<?>> classesForNames;
   private final BeanConfigurator beanConfigurator;
   private final ClasspathHelper classpathHelper;
   private final BeanDefinitionRegistry beanDefinitionRegistry;
@@ -49,7 +57,9 @@ public class DefaultBeanFactory implements BeanFactory {
   private final Map<String, Scope> scopes;
 
   private DefaultBeanFactory(ConfigurationMetadata configurationMetadata) {
+    this.beanProviders = new HashMap<>();
     this.dependencyContext = new HashSet<>();
+    this.classesForNames = new HashMap<>();
     this.beanConfigurator = new GenericBeanConfigurator(configurationMetadata);
     this.classpathHelper = this.beanConfigurator.getConfigurationMetadata().getClasspathHelper();
     this.beanDefinitionRegistry = this.beanConfigurator.getConfigurationMetadata().getBeanDefinitionRegistry();
@@ -110,10 +120,7 @@ public class DefaultBeanFactory implements BeanFactory {
     if (!this.scopes.containsKey(beanDefinition.getScope())) {
       throw new BeanException("Error! Failed to find " + beanDefinition.getScope() + " scope for " + beanDefinition.getBeanName() + " bean!");
     }
-    Class<? extends T> beanClass = (Class<? extends T>) this.classpathHelper.classForName(beanDefinition.getBeanClassName());
-    if (beanClass.isInterface()) {
-      beanClass = this.beanConfigurator.getImplementationClass(beanClass);
-    }
+    Class<? extends T> beanClass = (Class<? extends T>) getClassForName(beanDefinition);
     if (!requiredType.isAssignableFrom(beanClass)) {
       throw new BeanNotOfRequiredTypeException("Error! Failed to instantiate " + beanDefinition.getBeanName() + " bean as instance of " + requiredType.getName() + " class!");
     }
@@ -222,15 +229,20 @@ public class DefaultBeanFactory implements BeanFactory {
   }
 
   @Override
-  public List<String> getBeanDefinitionNames() {
-    return this.beanDefinitionRegistry.getBeanDefinitionNames();
+  public List<String> getBeanNames() {
+    return this.beanDefinitionRegistry.getBeanNames();
   }
 
   private void initializeBeans() {
-    getBeanDefinitionNames().stream()
-        .map(this::getBeanDefinition)
-        .filter(beanDefinition -> !beanDefinition.isLazyInit() && beanDefinition.isSingleton())
-        .forEach(beanDefinition -> getBean(beanDefinition.getBeanName(), this.classpathHelper.classForName(beanDefinition.getBeanClassName())));
+    for (String beanName : getBeanNames()) {
+      BeanDefinition beanDefinition = getBeanDefinition(beanName);
+      if (Objects.nonNull(beanDefinition.getFactoryBeanName())) {
+        this.beanProviders.computeIfAbsent(beanDefinition.getFactoryBeanName(), k -> new HashSet<>()).add(beanDefinition);
+      }
+      if (!beanDefinition.isLazyInit() && beanDefinition.isSingleton()) {
+        getBean(beanDefinition.getBeanName(), this.classpathHelper.classForName(beanDefinition.getBeanClassName()));
+      }
+    }
   }
 
   private void addDefaultBeanPostProcessors() {
@@ -241,6 +253,13 @@ public class DefaultBeanFactory implements BeanFactory {
     this.scopes.put(SingletonScope.getName(), new SingletonScope());
     this.scopes.put(PrototypeScope.getName(), new PrototypeScope());
     this.scopes.put(ThreadScope.getName(), new ThreadScope());
+  }
+
+  private Class<?> getClassForName(BeanDefinition beanDefinition) {
+    if (!this.classesForNames.containsKey(beanDefinition.getBeanClassName())) {
+      this.classesForNames.put(beanDefinition.getBeanClassName(), generateBeanClass(beanDefinition, this.classpathHelper.classForName(beanDefinition.getBeanClassName())));
+    }
+    return this.classesForNames.get(beanDefinition.getBeanClassName());
   }
 
   private <T> ObjectProvider<T> getProvider(BeanDefinition beanDefinition, Class<? extends T> beanClass) {
@@ -270,11 +289,29 @@ public class DefaultBeanFactory implements BeanFactory {
         .forEach(beanPostProcessor -> beanPostProcessor.postProcessBeforeDestruction(bean, beanDefinition.getBeanName()));
   }
 
+  @SuppressWarnings("resource")
+  private Class<?> generateBeanClass(BeanDefinition beanDefinition, Class<?> originClass) {
+    Map<Method, MethodArgumentValues> methods = getBeanMethods(Arrays.asList(originClass.getDeclaredMethods()), beanDefinition);
+    Builder<?> builder = new ByteBuddy().subclass(originClass);
+    for (BeanDefinition providerBeanDefinition : this.beanProviders.getOrDefault(beanDefinition.getBeanName(), Set.of())) {
+      builder = builder.method(ElementMatchers.named(providerBeanDefinition.getFactoryMethodName())
+          .and(ElementMatchers.takesNoArguments()))
+          .intercept(MethodCall.call(() -> getBean(providerBeanDefinition.getBeanName(), this.classpathHelper.classForName(providerBeanDefinition.getBeanClassName()))));
+    }
+    for (Entry<Method, MethodArgumentValues> methodEntry : methods.entrySet()) {
+      List<ObjectProvider<?>> argumentProviders = getBeanDependencies(methodEntry.getKey().getParameters(), methodEntry.getValue());
+      builder = builder.method(ElementMatchers.is(methodEntry.getKey()))
+          .intercept(MethodCall.invokeSuper()
+              .with(argumentProviders.stream().map(ObjectProvider::getObject).toArray(Object[]::new)));
+    }
+    return builder.make().load(Thread.currentThread().getContextClassLoader()).getLoaded();
+  }
+
   @SuppressWarnings("unchecked")
   private <T> T constructBean(BeanDefinition beanDefinition, Class<? extends T> beanClass) {
     try {
       Constructor<? extends T> constructor = (Constructor<? extends T>) getBeanConstructor(Arrays.asList(beanClass.getDeclaredConstructors()), beanDefinition.getConstructorArgumentValues());
-      List<ObjectProvider<?>> initArgProviders = getBeanConstructionDependencies(constructor.getParameters(), beanDefinition.getConstructorArgumentValues());
+      List<ObjectProvider<?>> initArgProviders = getBeanDependencies(constructor.getParameters(), beanDefinition.getConstructorArgumentValues());
       constructor.setAccessible(true);
       return constructor.newInstance(initArgProviders.stream().map(ObjectProvider::getObject).toArray(Object[]::new));
     } catch (InstantiationException | IllegalAccessException | InvocationTargetException e) {
@@ -295,8 +332,22 @@ public class DefaultBeanFactory implements BeanFactory {
     }
   }
 
+  private Map<Method, MethodArgumentValues> getBeanMethods(List<Method> methods, BeanDefinition beanDefinition) {
+    Map<Method, MethodArgumentValues> methodCandidates = new HashMap<>();
+    for (Method method : methods) {
+      if (beanDefinition.hasMethodArgumentValues(method.getName())) {
+        for (MethodArgumentValues methodArgumentValues : beanDefinition.getMethodArgumentValues(method.getName())) {
+          if (isBeanArguments(method.getParameters(), methodArgumentValues)) {
+            methodCandidates.put(method, methodArgumentValues);
+          }
+        }
+      }
+    }
+    return methodCandidates;
+  }
+
   private <T> Constructor<? extends T> getBeanConstructor(List<Constructor<? extends T>> constructors, ConstructorArgumentValues constructorArgumentValues) {
-    List<Constructor<? extends T>> constructorCandidates = constructors.stream().filter(constructor -> isBeanConstructor(constructor.getParameters(), constructorArgumentValues)).toList();
+    List<Constructor<? extends T>> constructorCandidates = constructors.stream().filter(constructor -> isBeanArguments(constructor.getParameters(), constructorArgumentValues)).toList();
     if (constructorCandidates.size() > 1) {
       throw new BeanException("Error! Failed to unambiguously determine constructor for bean!");
     } else if (!constructorCandidates.isEmpty()) {
@@ -304,19 +355,9 @@ public class DefaultBeanFactory implements BeanFactory {
     } else throw new BeanException("Error! Failed to find constructor for bean!");
   }
 
-  private List<ObjectProvider<?>> getBeanConstructionDependencies(Parameter[] parameters, ConstructorArgumentValues constructorArgumentValues) {
-    List<ObjectProvider<?>> beanDependencies = new ArrayList<>(parameters.length);
-    for (int i = 0; i < parameters.length; i++) {
-      ValueHolder valueHolder = parameters[i].isNamePresent() ? constructorArgumentValues.getGenericArgumentValue(parameters[i].getName()) : constructorArgumentValues.getIndexedArgumentValue(i);
-      processValueHolder(valueHolder);
-      beanDependencies.add(valueHolder.getValueProvider());
-    }
-    return beanDependencies;
-  }
-
   private Map<Field, ObjectProvider<?>> getBeanInitializationDependencies(Map<String, Field> fields, PropertyValues propertyValues) {
     Map<Field, ObjectProvider<?>> beanDependencies = new HashMap<>();
-    for (ValueHolder valueHolder : propertyValues.getPropertyValues()) {
+    for (ValueHolder valueHolder : propertyValues.getGenericValues()) {
       if (!fields.containsKey(valueHolder.getName())) {
         throw new BeanException("Error! Failed to find " + valueHolder.getName() + " field!");
       }
@@ -326,16 +367,26 @@ public class DefaultBeanFactory implements BeanFactory {
     return beanDependencies;
   }
 
-  private boolean isBeanConstructor(Parameter[] parameters, ConstructorArgumentValues constructorArgumentValues) {
-    if (constructorArgumentValues.size() != parameters.length) {
+  private List<ObjectProvider<?>> getBeanDependencies(Parameter[] parameters, ArgumentValues argumentValues) {
+    List<ObjectProvider<?>> beanDependencies = new ArrayList<>(parameters.length);
+    for (int i = 0; i < parameters.length; i++) {
+      ValueHolder valueHolder = parameters[i].isNamePresent() ? argumentValues.getGenericValue(parameters[i].getName()) : argumentValues.getIndexedValue(i);
+      processValueHolder(valueHolder);
+      beanDependencies.add(valueHolder.getValueProvider());
+    }
+    return beanDependencies;
+  }
+
+  private boolean isBeanArguments(Parameter[] parameters, ArgumentValues argumentValues) {
+    if (argumentValues.size() != parameters.length) {
       return false;
     }
     for (int i = 0; i < parameters.length; i++) {
       if (parameters[i].isNamePresent()) {
-        if (!constructorArgumentValues.hasGenericArgumentValue(parameters[i].getName()) || !parameters[i].getType().isAssignableFrom(this.classpathHelper.classForName(constructorArgumentValues.getGenericArgumentValue(parameters[i].getName()).getType()))) {
+        if (!argumentValues.hasGenericValue(parameters[i].getName()) || !parameters[i].getType().isAssignableFrom(this.classpathHelper.classForName(argumentValues.getGenericValue(parameters[i].getName()).getType()))) {
           return false;
         }
-      } else if (!constructorArgumentValues.hasIndexedArgumentValue(i) || !parameters[i].getType().isAssignableFrom(this.classpathHelper.classForName(constructorArgumentValues.getIndexedArgumentValue(i).getType()))) {
+      } else if (!argumentValues.hasIndexedValue(i) || !parameters[i].getType().isAssignableFrom(this.classpathHelper.classForName(argumentValues.getIndexedValue(i).getType()))) {
         return false;
       }
     }

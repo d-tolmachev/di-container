@@ -4,6 +4,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
+import java.util.stream.Collectors;
 import javax.xml.parsers.DocumentBuilderFactory;
 import javax.xml.parsers.ParserConfigurationException;
 import org.w3c.dom.Document;
@@ -11,8 +13,9 @@ import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
 import org.xml.sax.SAXException;
 import team.zavod.di.config.BeanDefinition;
-import team.zavod.di.config.dependency.ConstructorArgumentValues;
+import team.zavod.di.config.dependency.ArgumentValues;
 import team.zavod.di.config.GenericBeanDefinition;
+import team.zavod.di.config.dependency.MethodArgumentValues;
 import team.zavod.di.config.dependency.PropertyValues;
 import team.zavod.di.config.dependency.ValueHolder;
 import team.zavod.di.configuration.exception.XmlConfigurationException;
@@ -34,6 +37,8 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
   private static final String DESTROY_METHOD_ATTRIBUTE = "destroy-method";
   private static final String CONSTRUCTOR_ARGUMENT_TAG = "constructor-arg";
   private static final String PROPERTY_TAG = "property";
+  private static final String METHOD_TAG = "method";
+  private static final String METHOD_ARGUMENT_TAG = "method-arg";
   private static final String NAME_ATTRIBUTE = "name";
   private static final String REF_ATTRIBUTE = "ref";
   private final ClassLoader classLoader;
@@ -124,8 +129,9 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
       if (bean.hasAttribute(DESTROY_METHOD_ATTRIBUTE)) {
         beanDefinition.setDestroyMethodName(bean.getAttribute(DESTROY_METHOD_ATTRIBUTE));
       }
-      parseConstructorArguments(bean.getElementsByTagName(CONSTRUCTOR_ARGUMENT_TAG), beanDefinition.getConstructorArgumentValues());
+      parseArguments(bean.getElementsByTagName(CONSTRUCTOR_ARGUMENT_TAG), beanDefinition.getConstructorArgumentValues());
       parseProperties(bean.getElementsByTagName(PROPERTY_TAG), beanDefinition.getPropertyValues());
+      parseMethods(bean.getElementsByTagName(METHOD_TAG), beanDefinition);
       this.beanDefinitionRegistry.registerBeanDefinition(beanDefinition);
     }
     resolveBeansInjects();
@@ -161,18 +167,6 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
     }
   }
 
-  private void parseConstructorArguments(NodeList constructorArguments, ConstructorArgumentValues constructorArgumentValues) {
-    for (int i = 0; i < constructorArguments.getLength(); i++) {
-      Element constructorArgument = (Element) constructorArguments.item(i);
-      if (!constructorArgument.hasAttribute(REF_ATTRIBUTE)) {
-        throw new XmlConfigurationException("Error! Failed to find " + REF_ATTRIBUTE + " attribute for " + CONSTRUCTOR_ARGUMENT_TAG + "!");
-      }
-      if (constructorArgument.hasAttribute(NAME_ATTRIBUTE)) {
-        constructorArgumentValues.addGenericArgumentValue(null, null, constructorArgument.getAttribute(NAME_ATTRIBUTE), constructorArgument.getAttribute(REF_ATTRIBUTE));
-      } else constructorArgumentValues.addIndexedArgumentValue(i, null, null, constructorArgument.getAttribute(REF_ATTRIBUTE));
-    }
-  }
-
   private void parseProperties(NodeList properties, PropertyValues propertyValues) {
     for (int i = 0; i < properties.getLength(); i++) {
       Element property = (Element) properties.item(i);
@@ -182,17 +176,47 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
       if (!property.hasAttribute(NAME_ATTRIBUTE)) {
         throw new XmlConfigurationException("Failed to find " + NAME_ATTRIBUTE + " attribute for " + PROPERTY_TAG + "!");
       }
-      propertyValues.addPropertyValue(null, null, property.getAttribute(NAME_ATTRIBUTE), property.getAttribute(REF_ATTRIBUTE));
+      propertyValues.addGenericValue(null, null, property.getAttribute(NAME_ATTRIBUTE), property.getAttribute(REF_ATTRIBUTE));
+    }
+  }
+
+  private void parseMethods(NodeList methods, BeanDefinition beanDefinition) {
+    for (int i = 0; i < methods.getLength(); i++) {
+      Element method = (Element) methods.item(i);
+      if (!method.hasAttribute(NAME_ATTRIBUTE)) {
+        throw new XmlConfigurationException("Error! Failed to find " + NAME_ATTRIBUTE + " for " + METHOD_TAG + "!");
+      }
+      String methodName = method.getAttribute(NAME_ATTRIBUTE);
+      MethodArgumentValues methodArgumentValues = new MethodArgumentValues(methodName);
+      parseArguments(method.getElementsByTagName(METHOD_ARGUMENT_TAG), methodArgumentValues);
+      beanDefinition.addMethodArgumentValues(methodName, methodArgumentValues);
     }
   }
 
   @SuppressWarnings("DuplicatedCode")
   private void resolveBeansInjects() {
-    for (String beanName : this.beanDefinitionRegistry.getBeanDefinitionNames()) {
+    for (String beanName : this.beanDefinitionRegistry.getBeanNames()) {
       BeanDefinition beanDefinition = this.beanDefinitionRegistry.getBeanDefinition(beanName);
-      beanDefinition.getConstructorArgumentValues().getIndexedArgumentValues().values().forEach(this::resolveValueHolder);
-      beanDefinition.getConstructorArgumentValues().getGenericArgumentValues().forEach(this::resolveValueHolder);
-      beanDefinition.getPropertyValues().getPropertyValues().forEach(this::resolveValueHolder);
+      beanDefinition.getConstructorArgumentValues().getIndexedValues().values().forEach(this::resolveValueHolder);
+      beanDefinition.getConstructorArgumentValues().getGenericValues().forEach(this::resolveValueHolder);
+      beanDefinition.getPropertyValues().getGenericValues().forEach(this::resolveValueHolder);
+      Set<MethodArgumentValues> methodArgumentValuesSet = beanDefinition.getMethodNames().stream().map(beanDefinition::getMethodArgumentValues).flatMap(Set::stream).collect(Collectors.toSet());
+      for (MethodArgumentValues methodArgumentValues : methodArgumentValuesSet) {
+        methodArgumentValues.getIndexedValues().values().forEach(this::resolveValueHolder);
+        methodArgumentValues.getGenericValues().forEach(this::resolveValueHolder);
+      }
+    }
+  }
+
+  private void parseArguments(NodeList arguments, ArgumentValues argumentValues) {
+    for (int i = 0; i < arguments.getLength(); i++) {
+      Element argument = (Element) arguments.item(i);
+      if (!argument.hasAttribute(REF_ATTRIBUTE)) {
+        throw new XmlConfigurationException("Error! Failed to find " + REF_ATTRIBUTE + " attribute!");
+      }
+      if (argument.hasAttribute(NAME_ATTRIBUTE)) {
+        argumentValues.addGenericValue(null, null, argument.getAttribute(NAME_ATTRIBUTE), argument.getAttribute(REF_ATTRIBUTE));
+      } else argumentValues.addIndexedValue(i, null, null, argument.getAttribute(REF_ATTRIBUTE));
     }
   }
 

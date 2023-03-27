@@ -17,5 +17,5 @@ public interface BeanDefinitionRegistry {
 
   Set<BeanDefinition> getBeanDefinitions(String beanClassName) throws NoSuchBeanDefinitionException;
 
-  List<String> getBeanDefinitionNames();
+  List<String> getBeanNames();
 }

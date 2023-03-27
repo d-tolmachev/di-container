@@ -22,8 +22,9 @@ import team.zavod.di.annotation.Lazy;
 import team.zavod.di.annotation.Primary;
 import team.zavod.di.annotation.Scope;
 import team.zavod.di.config.BeanDefinition;
-import team.zavod.di.config.dependency.ConstructorArgumentValues;
+import team.zavod.di.config.dependency.ArgumentValues;
 import team.zavod.di.config.GenericBeanDefinition;
+import team.zavod.di.config.dependency.MethodArgumentValues;
 import team.zavod.di.config.dependency.PropertyValues;
 import team.zavod.di.configuration.exception.AnnotationConfigurationException;
 import team.zavod.di.factory.registry.BeanDefinitionRegistry;
@@ -99,7 +100,7 @@ public class AnnotationConfigurationMetadata implements ConfigurationMetadata {
       parseProvider(componentClass, beanDefinition);
       parseInit(componentClass, beanDefinition);
       parseDestroy(componentClass, beanDefinition);
-      parseInjects(componentClass, beanDefinition.getConstructorArgumentValues(), beanDefinition.getPropertyValues());
+      parseInjects(componentClass, beanDefinition);
       this.beanDefinitionRegistry.registerBeanDefinition(beanDefinition);
     }
     resolveBeansProviders();
@@ -133,28 +134,20 @@ public class AnnotationConfigurationMetadata implements ConfigurationMetadata {
     }
   }
 
-  private void parseInjects(Class<?> componentClass, ConstructorArgumentValues constructorArgumentValues, PropertyValues propertyValues) {
+  private void parseInjects(Class<?> componentClass, BeanDefinition beanDefinition) {
     Set<Constructor<?>> constructors = new HashSet<>();
     AUTOWIRED_ANNOTATIONS.forEach(AUTOWIRED_ANNOTATION -> constructors.addAll(Arrays.stream(componentClass.getDeclaredConstructors()).filter(constructor -> constructor.isAnnotationPresent(AUTOWIRED_ANNOTATION)).collect(Collectors.toSet())));
     if (constructors.size() > 1) {
       throw new AnnotationConfigurationException("Error! Failed to unambiguously determine constructor to autowire " + componentClass.getName() + "!");
     } else if (!constructors.isEmpty()) {
-      parseConstructorArguments(constructors.iterator().next().getParameters(), constructorArgumentValues);
+      parseArguments(constructors.iterator().next().getParameters(), beanDefinition.getConstructorArgumentValues());
     }
     Set<Field> fields = new HashSet<>();
     AUTOWIRED_ANNOTATIONS.forEach(AUTOWIRED_ANNOTATION -> fields.addAll(Arrays.stream(componentClass.getDeclaredFields()).filter(field -> field.isAnnotationPresent(AUTOWIRED_ANNOTATION)).collect(Collectors.toSet())));
-    parseProperties(fields, propertyValues);
-  }
-
-  private void parseConstructorArguments(Parameter[] parameters, ConstructorArgumentValues constructorArgumentValues) {
-    for (int i = 0; i < parameters.length; i++) {
-      Named named = parameters[i].getAnnotation(NAMED_ANNOTATION);
-      String type = parameters[i].getType().getName();
-      String beanName = Objects.nonNull(named) ? named.value() : null;
-      if (parameters[i].isNamePresent()) {
-        constructorArgumentValues.addGenericArgumentValue(null, type, parameters[i].getName(), beanName);
-      } else constructorArgumentValues.addIndexedArgumentValue(i, null, type, beanName);
-    }
+    parseProperties(fields, beanDefinition.getPropertyValues());
+    Set<Method> methods = new HashSet<>();
+    AUTOWIRED_ANNOTATIONS.forEach(AUTOWIRED_ANNOTATION -> methods.addAll(Arrays.stream(componentClass.getDeclaredMethods()).filter(method -> method.isAnnotationPresent(AUTOWIRED_ANNOTATION)).collect(Collectors.toSet())));
+    parseMethods(methods, beanDefinition);
   }
 
   private void parseProperties(Set<Field> fields, PropertyValues propertyValues) {
@@ -162,16 +155,44 @@ public class AnnotationConfigurationMetadata implements ConfigurationMetadata {
       Named named = field.getAnnotation(NAMED_ANNOTATION);
       String type = field.getType().getName();
       String beanName = Objects.nonNull(named) ? named.value() : null;
-      propertyValues.addPropertyValue(null, type, field.getName(), beanName);
+      propertyValues.addGenericValue(null, type, field.getName(), beanName);
     }
   }
 
+  private void parseMethods(Set<Method> methods, BeanDefinition beanDefinition) {
+    for (Method method : methods) {
+      MethodArgumentValues methodArgumentValues = new MethodArgumentValues(method.getName());
+      parseArguments(method.getParameters(), methodArgumentValues);
+      beanDefinition.addMethodArgumentValues(method.getName(), methodArgumentValues);
+    }
+  }
+
+  private void parseArguments(Parameter[] parameters, ArgumentValues argumentValues) {
+    for (int i = 0; i < parameters.length; i++) {
+      Named named = parameters[i].getAnnotation(NAMED_ANNOTATION);
+      String type = parameters[i].getType().getName();
+      String beanName = Objects.nonNull(named) ? named.value() : null;
+      if (parameters[i].isNamePresent()) {
+        argumentValues.addGenericValue(null, type, parameters[i].getName(), beanName);
+      } else argumentValues.addIndexedValue(i, null, type, beanName);
+    }
+  }
+
+  @SuppressWarnings("unchecked")
   private void resolveBeansProviders() {
-    for (String beanName : this.beanDefinitionRegistry.getBeanDefinitionNames()) {
+    for (String beanName : this.beanDefinitionRegistry.getBeanNames()) {
       BeanDefinition beanDefinition = this.beanDefinitionRegistry.getBeanDefinition(beanName);
-      String factoryBeanClassName = beanDefinition.getFactoryBeanName();
-      if (Objects.nonNull(factoryBeanClassName)) {
-        Set<BeanDefinition> factoryBeanDefinitions = this.beanDefinitionRegistry.getBeanDefinitions(factoryBeanClassName);
+      if (Objects.nonNull(beanDefinition.getFactoryBeanName())) {
+        Class<?> factoryBeanClass = this.classpathHelper.classForName(beanDefinition.getFactoryBeanName());
+        if (factoryBeanClass.isInterface()) {
+          Set<Class<?>> subTypes = (Set<Class<?>>) this.classpathHelper.getSubTypesOf(factoryBeanClass);
+          if (subTypes.size() > 1) {
+            throw new AnnotationConfigurationException("Error! Failed to unambiguously determine factory bean for " + beanDefinition.getBeanName() + " bean!");
+          } else if (!subTypes.isEmpty()) {
+            factoryBeanClass = subTypes.iterator().next();
+          } else throw new AnnotationConfigurationException("Error! Failed to find factory bean for " + beanDefinition.getBeanName() + " bean!");
+        }
+        Set<BeanDefinition> factoryBeanDefinitions = this.beanDefinitionRegistry.getBeanDefinitions(factoryBeanClass.getName());
         if (factoryBeanDefinitions.size() > 1) {
           throw new AnnotationConfigurationException("Error! Failed to unambiguously determine factory bean for " + beanDefinition.getBeanName() + " bean!");
         } else if (!factoryBeanDefinitions.isEmpty()) {

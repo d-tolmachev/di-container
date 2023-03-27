@@ -31,10 +31,10 @@ public class GenericBeanConfigurator implements BeanConfigurator {
           .filter(subType -> this.beanDefinitionRegistry.containsBeanDefinition(subType.getName()))
           .collect(Collectors.toSet());
       if (implementationClasses.size() > 1) {
-        throw new NoUniqueBeanException("Error! " + requiredType.getName() + " has more than 1 implementations!");
+        throw new NoUniqueBeanException("Error! " + requiredType.getName() + " has more than one implementations!");
       } else if (!implementationClasses.isEmpty()) {
         this.interfacesToImplementations.put(requiredType, implementationClasses.iterator().next());
-      } else throw new NoSuchBeanException("" + requiredType.getName() + " has no implementations!");
+      } else throw new NoSuchBeanException("Error! " + requiredType.getName() + " has no implementations!");
     }
     return (Class<? extends T>) this.interfacesToImplementations.get(requiredType);
   }

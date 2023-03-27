@@ -68,7 +68,7 @@ public class SimpleBeanDefinitionRegistry implements BeanDefinitionRegistry {
     return this.beanClassNamesToBeanDefinitions.get(beanClassName);
   }
 
-  public List<String> getBeanDefinitionNames() {
+  public List<String> getBeanNames() {
     return List.copyOf(this.beanNamesToBeanDefinitions.keySet());
   }
 }
