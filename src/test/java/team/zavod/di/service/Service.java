@@ -6,14 +6,14 @@ import team.zavod.di.service.interfaces.PaymentSystem;
 
 @Component
 public class Service {
-    private final PaymentSystem paymentSystem;
+  private PaymentSystem paymentSystem;
 
-        @Autowired
-        public Service(PaymentSystem paymentSystem) {
-        this.paymentSystem = paymentSystem;
-        }
+  @Autowired
+  public Service(PaymentSystem paymentSystem) {
+    this.paymentSystem = paymentSystem;
+  }
 
-    public void run() {
-        this.paymentSystem.pay();
-    }
+  public void run() {
+    this.paymentSystem.pay();
+  }
 }
