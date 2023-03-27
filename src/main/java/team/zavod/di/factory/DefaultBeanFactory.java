@@ -276,8 +276,14 @@ public class DefaultBeanFactory implements BeanFactory {
           fieldProvider.getKey().set(bean, fieldProvider.getValue().getObject());
         }
       }
+      Map<Method, MethodArgumentValues> methods = getBeanMethods(Arrays.asList(bean.getClass().getDeclaredMethods()), beanDefinition);
+      for (Entry<Method, MethodArgumentValues> methodEntry : methods.entrySet()) {
+        List<ObjectProvider<?>> argProviders = getBeanDependencies(methodEntry.getKey().getParameters(), methodEntry.getValue());
+        methodEntry.getKey().setAccessible(true);
+        methodEntry.getKey().invoke(bean, argProviders.stream().map(ObjectProvider::getObject).toArray(Object[]::new));
+      }
       this.beanPostProcessors.forEach(beanPostProcessor -> beanPostProcessor.postProcessAfterInitialization(bean, beanDefinition.getBeanName()));
-    } catch (IllegalAccessException e) {
+    } catch (IllegalAccessException | InvocationTargetException e) {
       throw new BeanException("Error! Failed to initialize dependencies for " + beanDefinition.getBeanName() + " bean!");
     }
   }
@@ -291,18 +297,11 @@ public class DefaultBeanFactory implements BeanFactory {
 
   @SuppressWarnings("resource")
   private Class<?> generateBeanClass(BeanDefinition beanDefinition, Class<?> originClass) {
-    Map<Method, MethodArgumentValues> methods = getBeanMethods(Arrays.asList(originClass.getDeclaredMethods()), beanDefinition);
     Builder<?> builder = new ByteBuddy().subclass(originClass);
     for (BeanDefinition providerBeanDefinition : this.beanProviders.getOrDefault(beanDefinition.getBeanName(), Set.of())) {
       builder = builder.method(ElementMatchers.named(providerBeanDefinition.getFactoryMethodName())
-          .and(ElementMatchers.takesNoArguments()))
+              .and(ElementMatchers.takesNoArguments()))
           .intercept(MethodCall.call(() -> getBean(providerBeanDefinition.getBeanName(), this.classpathHelper.classForName(providerBeanDefinition.getBeanClassName()))));
-    }
-    for (Entry<Method, MethodArgumentValues> methodEntry : methods.entrySet()) {
-      List<ObjectProvider<?>> argumentProviders = getBeanDependencies(methodEntry.getKey().getParameters(), methodEntry.getValue());
-      builder = builder.method(ElementMatchers.is(methodEntry.getKey()))
-          .intercept(MethodCall.invokeSuper()
-              .with(argumentProviders.stream().map(ObjectProvider::getObject).toArray(Object[]::new)));
     }
     return builder.make().load(Thread.currentThread().getContextClassLoader()).getLoaded();
   }
@@ -332,6 +331,15 @@ public class DefaultBeanFactory implements BeanFactory {
     }
   }
 
+  private <T> Constructor<? extends T> getBeanConstructor(List<Constructor<? extends T>> constructors, ConstructorArgumentValues constructorArgumentValues) {
+    List<Constructor<? extends T>> constructorCandidates = constructors.stream().filter(constructor -> isBeanArguments(constructor.getParameters(), constructorArgumentValues)).toList();
+    if (constructorCandidates.size() > 1) {
+      throw new BeanException("Error! Failed to unambiguously determine constructor for bean!");
+    } else if (!constructorCandidates.isEmpty()) {
+      return constructorCandidates.get(0);
+    } else throw new BeanException("Error! Failed to find constructor for bean!");
+  }
+
   private Map<Method, MethodArgumentValues> getBeanMethods(List<Method> methods, BeanDefinition beanDefinition) {
     Map<Method, MethodArgumentValues> methodCandidates = new HashMap<>();
     for (Method method : methods) {
@@ -344,15 +352,6 @@ public class DefaultBeanFactory implements BeanFactory {
       }
     }
     return methodCandidates;
-  }
-
-  private <T> Constructor<? extends T> getBeanConstructor(List<Constructor<? extends T>> constructors, ConstructorArgumentValues constructorArgumentValues) {
-    List<Constructor<? extends T>> constructorCandidates = constructors.stream().filter(constructor -> isBeanArguments(constructor.getParameters(), constructorArgumentValues)).toList();
-    if (constructorCandidates.size() > 1) {
-      throw new BeanException("Error! Failed to unambiguously determine constructor for bean!");
-    } else if (!constructorCandidates.isEmpty()) {
-      return constructorCandidates.get(0);
-    } else throw new BeanException("Error! Failed to find constructor for bean!");
   }
 
   private Map<Field, ObjectProvider<?>> getBeanInitializationDependencies(Map<String, Field> fields, PropertyValues propertyValues) {
