@@ -1,6 +1,5 @@
 stages:
   - verify
-  - build
   - test
 
 cache:
@@ -19,31 +18,13 @@ checkstyle:
     - wget -q -O ./checkstyle.jar https://github.com/checkstyle/checkstyle/releases/download/checkstyle-10.7.0/checkstyle-10.7.0-all.jar    # So we manually specify previous version
     - java -jar ./checkstyle.jar src/ -c /google_checks.xml
 
-# build stage
-build-gradle:
-  stage: build
-  needs:
-    - checkstyle
-  image: eclipse-temurin:17-jdk-jammy
-  script:
-    - chmod +x ./gradlew
-    - ./gradlew --gradle-user-home .gradle/ build
-  artifacts:
-    expire_in: 1 week
-    paths:
-      - build/libs/
-
 # test stage
 junit:
   stage: test
-  needs:
-    - build-gradle
   image: eclipse-temurin:17-jdk-jammy
   script:
     - chmod +x ./gradlew
     - ./gradlew --gradle-user-home .gradle/ test
-  dependencies:
-    - build-gradle
   artifacts:
     when: always
     reports:
