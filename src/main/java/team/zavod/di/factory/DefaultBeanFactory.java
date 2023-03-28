@@ -276,7 +276,7 @@ public class DefaultBeanFactory implements BeanFactory {
           fieldProvider.getKey().set(bean, fieldProvider.getValue().getObject());
         }
       }
-      Map<Method, MethodArgumentValues> methods = getBeanMethods(Arrays.asList(bean.getClass().getDeclaredMethods()), beanDefinition);
+      Map<Method, MethodArgumentValues> methods = getBeanMethods(Arrays.stream(bean.getClass().getDeclaredMethods()).collect(Collectors.groupingBy(Method::getName, Collectors.toSet())), beanDefinition);
       for (Entry<Method, MethodArgumentValues> methodEntry : methods.entrySet()) {
         List<ObjectProvider<?>> argProviders = getBeanDependencies(methodEntry.getKey().getParameters(), methodEntry.getValue());
         methodEntry.getKey().setAccessible(true);
@@ -340,14 +340,15 @@ public class DefaultBeanFactory implements BeanFactory {
     } else throw new BeanException("Error! Failed to find constructor for bean!");
   }
 
-  private Map<Method, MethodArgumentValues> getBeanMethods(List<Method> methods, BeanDefinition beanDefinition) {
+  private Map<Method, MethodArgumentValues> getBeanMethods(Map<String, Set<Method>> methods, BeanDefinition beanDefinition) {
     Map<Method, MethodArgumentValues> methodCandidates = new HashMap<>();
-    for (Method method : methods) {
-      if (beanDefinition.hasMethodArgumentValues(method.getName())) {
-        for (MethodArgumentValues methodArgumentValues : beanDefinition.getMethodArgumentValues(method.getName())) {
-          if (isBeanArguments(method.getParameters(), methodArgumentValues)) {
-            methodCandidates.put(method, methodArgumentValues);
-          }
+    for (Entry<String, Set<Method>> methodEntry : methods.entrySet()) {
+      if (beanDefinition.hasMethodArgumentValues(methodEntry.getKey())) {
+        methodEntry.getValue().forEach(method -> beanDefinition.getMethodArgumentValues(methodEntry.getKey()).stream()
+            .filter(methodArgumentValues -> isBeanArguments(method.getParameters(), methodArgumentValues))
+            .forEach(methodArgumentValues -> methodCandidates.put(method, methodArgumentValues)));
+        if (beanDefinition.getMethodArgumentValues(methodEntry.getKey()).size() != methodCandidates.keySet().stream().filter(method -> method.getName().equals(methodEntry.getKey())).count()) {
+          throw new BeanException("Error! Failed to find " + methodEntry.getKey() + " method for " + beanDefinition.getBeanName() + " bean!");
         }
       }
     }
