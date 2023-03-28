@@ -1,5 +1,6 @@
 package team.zavod.di.factory;
 
+import java.io.InputStream;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
@@ -71,8 +72,12 @@ public class DefaultBeanFactory implements BeanFactory {
     initializeBeans();
   }
 
-  public DefaultBeanFactory(String filename) {
-    this(new XmlConfigurationMetadata(filename));
+  public DefaultBeanFactory(InputStream xmlConfiguration) {
+    this(new XmlConfigurationMetadata(xmlConfiguration));
+  }
+
+  public DefaultBeanFactory(InputStream xmlConfiguration, ClassLoader classLoader) {
+    this(new XmlConfigurationMetadata(xmlConfiguration, classLoader));
   }
 
   public DefaultBeanFactory(Class<?> configurationClass) {
@@ -81,10 +86,6 @@ public class DefaultBeanFactory implements BeanFactory {
 
   public DefaultBeanFactory(String[] basePackages) {
     this(new AnnotationConfigurationMetadata(basePackages));
-  }
-
-  public DefaultBeanFactory(String filename, ClassLoader classLoader) {
-    this(new XmlConfigurationMetadata(filename, classLoader));
   }
 
   public DefaultBeanFactory(Class<?> configurationClass, ClassLoader classLoader) {

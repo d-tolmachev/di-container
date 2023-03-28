@@ -1,27 +1,23 @@
-package team.zavod.di.service;
+package team.zavod.di.AutowiredWithSingleImplementation;
 
 import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import team.zavod.di.AutowiredWithSingleImplementation.impl.CardPaymentSystem;
+import team.zavod.di.AutowiredWithSingleImplementation.interfaces.PaymentSystem;
 import team.zavod.di.factory.BeanFactory;
 import team.zavod.di.factory.DefaultBeanFactory;
-import team.zavod.di.service.impl.CardPaymentSystem;
-import team.zavod.di.service.interfaces.PaymentSystem;
 
 import java.lang.reflect.Field;
 
-public class TestService {
-  private final ClassLoader classLoader;
-
-  TestService() {
-    this.classLoader = Thread.currentThread().getContextClassLoader().getParent();
-  }
+public class TestAutowiredWithSingleImplementation {
+  private final ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
 
   @SuppressWarnings("SpellCheckingInspection")
   @Test
   @DisplayName("Annotation configuration factory")
   void testAnnotationConfigurationFactory() throws NoSuchFieldException, IllegalAccessException {
-    BeanFactory beanFactory = new DefaultBeanFactory(new String[]{"team.zavod.di.service"}, this.classLoader);
+    BeanFactory beanFactory = new DefaultBeanFactory(new String[]{"team.zavod.di.AutowiredWithSingleImplementation"}, this.classLoader);
     Service service = beanFactory.getBean("service", Service.class);
     service.run();
     checkServiceHasCorrectInstanse(service);
@@ -39,7 +35,7 @@ public class TestService {
   @Test
   @DisplayName("Xml configuration factory")
   void testXmlConfigurationFactory() throws NoSuchFieldException, IllegalAccessException {
-    BeanFactory beanFactory = new DefaultBeanFactory("test/beans.xml", this.classLoader);
+    BeanFactory beanFactory = new DefaultBeanFactory(classLoader.getResourceAsStream("AutowiredWithSingleImplementation.xml"), this.classLoader);
     Service service = beanFactory.getBean("service", Service.class);
     service.run();
     checkServiceHasCorrectInstanse(service);

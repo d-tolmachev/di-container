@@ -1,13 +1,12 @@
-package team.zavod.di.service;
+package team.zavod.di.AutowiredWithMultipleImplementations;
 
 import team.zavod.di.annotation.BasePackages;
 import team.zavod.di.annotation.Bean;
 import team.zavod.di.annotation.Configuration;
-import team.zavod.di.service.impl.CardPaymentSystem;
-import team.zavod.di.service.interfaces.PaymentSystem;
+import team.zavod.di.AutowiredWithMultipleImplementations.impl.CardPaymentSystem;
 
 @Configuration
-@BasePackages("team.zavod.di.service")
+@BasePackages("team.zavod.di.AutowiredWithMultipleImplementations")
 public class ServiceConfig {
   @Bean
   public Service service() {
@@ -15,7 +14,7 @@ public class ServiceConfig {
   }
 
   @Bean
-  public PaymentSystem paymentSystem() {
+  public CardPaymentSystem paymentSystem() {
     return new CardPaymentSystem();
   }
 }

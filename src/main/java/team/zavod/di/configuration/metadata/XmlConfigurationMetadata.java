@@ -1,6 +1,7 @@
 package team.zavod.di.configuration.metadata;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -46,15 +47,15 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
   private final BeanDefinitionRegistry beanDefinitionRegistry;
   private ClasspathHelper classpathHelper;
 
-  public XmlConfigurationMetadata(String filename) {
-    this(filename, null);
+  public XmlConfigurationMetadata(InputStream xmlInputStream) {
+    this(xmlInputStream, null);
   }
 
-  public XmlConfigurationMetadata(String filename, ClassLoader classLoader) {
+  public XmlConfigurationMetadata(InputStream xmlInputStream, ClassLoader classLoader) {
     this.classLoader = classLoader;
     this.packagesToScan = new ArrayList<>();
     this.beanDefinitionRegistry = new SimpleBeanDefinitionRegistry();
-    parseXmlConfiguration(filename);
+    parseXmlConfiguration(xmlInputStream);
   }
 
   @Override
@@ -72,9 +73,9 @@ public class XmlConfigurationMetadata implements ConfigurationMetadata {
     return this.classpathHelper;
   }
 
-  private void parseXmlConfiguration(String filename) {
+  private void parseXmlConfiguration(InputStream xmlInputStream) {
     try {
-      Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(filename);
+      Document document = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(xmlInputStream);
       parseBasePackages(document.getElementsByTagName(BASE_PACKAGE_TAG));
       this.classpathHelper = Objects.nonNull(this.classLoader) ? new ClasspathHelper(this.packagesToScan, this.classLoader) : new ClasspathHelper(this.packagesToScan);
       parseBeans(document.getElementsByTagName(BEAN_TAG));

@@ -1,8 +1,9 @@
-package team.zavod.di.service;
+package team.zavod.di.AutowiredWithSingleImplementation;
 
+import jakarta.inject.Named;
+import team.zavod.di.AutowiredWithSingleImplementation.interfaces.PaymentSystem;
 import team.zavod.di.annotation.Autowired;
 import team.zavod.di.annotation.Component;
-import team.zavod.di.service.interfaces.PaymentSystem;
 
 @Component
 public class Service {
