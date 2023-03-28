@@ -4,6 +4,7 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
+import java.lang.reflect.Modifier;
 import java.lang.reflect.Parameter;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -256,8 +257,12 @@ public class DefaultBeanFactory implements BeanFactory {
   }
 
   private Class<?> getClassForName(BeanDefinition beanDefinition) {
+    Class<?> beanClass = this.classpathHelper.classForName(beanDefinition.getBeanClassName());
+    if (!this.beanProviders.containsKey(beanDefinition.getBeanClassName())) {
+      return beanClass;
+    }
     if (!this.classesForNames.containsKey(beanDefinition.getBeanClassName())) {
-      this.classesForNames.put(beanDefinition.getBeanClassName(), generateBeanClass(beanDefinition, this.classpathHelper.classForName(beanDefinition.getBeanClassName())));
+      this.classesForNames.put(beanDefinition.getBeanClassName(), generateBeanClass(beanDefinition, beanClass));
     }
     return this.classesForNames.get(beanDefinition.getBeanClassName());
   }
@@ -297,6 +302,9 @@ public class DefaultBeanFactory implements BeanFactory {
 
   @SuppressWarnings("resource")
   private Class<?> generateBeanClass(BeanDefinition beanDefinition, Class<?> originClass) {
+    if (Modifier.isFinal(originClass.getModifiers())) {
+      throw new BeanException("Error! Failed to use final class " + originClass.getName() + " for configuration!");
+    }
     Builder<?> builder = new ByteBuddy().subclass(originClass);
     for (BeanDefinition providerBeanDefinition : this.beanProviders.getOrDefault(beanDefinition.getBeanName(), Set.of())) {
       builder = builder.method(ElementMatchers.named(providerBeanDefinition.getFactoryMethodName())
