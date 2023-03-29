@@ -50,7 +50,8 @@ import team.zavod.di.util.ClasspathHelper;
 
 public class DefaultBeanFactory implements BeanFactory {
   private final Map<String, Set<BeanDefinition>> beanProviders;
-  private final Set<BeanDefinition> dependencyContext;
+  private final Set<BeanDefinition> constructionDependencyContext;
+  private final Set<BeanDefinition> initializationDependencyContext;
   private final Map<String, Class<?>> classesForNames;
   private final BeanConfigurator beanConfigurator;
   private final ClasspathHelper classpathHelper;
@@ -60,7 +61,8 @@ public class DefaultBeanFactory implements BeanFactory {
 
   private DefaultBeanFactory(ConfigurationMetadata configurationMetadata) {
     this.beanProviders = new HashMap<>();
-    this.dependencyContext = new HashSet<>();
+    this.constructionDependencyContext = new HashSet<>();
+    this.initializationDependencyContext = new HashSet<>();
     this.classesForNames = new HashMap<>();
     this.beanConfigurator = new GenericBeanConfigurator(configurationMetadata);
     this.classpathHelper = this.beanConfigurator.getConfigurationMetadata().getClasspathHelper();
@@ -126,12 +128,15 @@ public class DefaultBeanFactory implements BeanFactory {
     if (!requiredType.isAssignableFrom(beanClass)) {
       throw new BeanNotOfRequiredTypeException("Error! Failed to instantiate " + beanDefinition.getBeanName() + " bean as instance of " + requiredType.getName() + " class!");
     }
-    if (!this.dependencyContext.add(beanDefinition)) {
+    if (!this.constructionDependencyContext.add(beanDefinition)) {
       throw new BeanException("Error! Failed to instantiate " + beanDefinition.getBeanName() + " bean due to circular dependencies!");
     }
     T bean = (T) getScope(beanDefinition.getScope()).get(name, requiredType, getProvider(beanDefinition, beanClass));
-    this.dependencyContext.remove(beanDefinition);
-    processInitialization(beanDefinition, bean);
+    this.constructionDependencyContext.remove(beanDefinition);
+    if (this.initializationDependencyContext.add(beanDefinition)) {
+      processInitialization(beanDefinition, bean);
+    }
+    this.initializationDependencyContext.remove(beanDefinition);
     return bean;
   }
 
