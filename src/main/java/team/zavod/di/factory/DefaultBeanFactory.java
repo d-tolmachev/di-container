@@ -130,9 +130,10 @@ public class DefaultBeanFactory implements BeanFactory {
     if (!this.constructionDependencyContext.add(beanDefinition)) {
       throw new BeanException("Error! Failed to instantiate " + beanDefinition.getBeanName() + " bean due to circular dependencies!");
     }
+    boolean isCreated = !containsBean(name);
     T bean = (T) getScope(beanDefinition.getScope()).get(name, requiredType, getProvider(beanDefinition, beanClass));
     this.constructionDependencyContext.remove(beanDefinition);
-    if (this.initializationDependencyContext.add(beanDefinition)) {
+    if (isCreated && this.initializationDependencyContext.add(beanDefinition)) {
       processInitialization(beanDefinition, bean);
     }
     this.initializationDependencyContext.remove(beanDefinition);
