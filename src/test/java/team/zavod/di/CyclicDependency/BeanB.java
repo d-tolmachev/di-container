@@ -5,7 +5,6 @@ import team.zavod.di.annotation.Component;
 import team.zavod.di.annotation.Lazy;
 
 @Component
-@Lazy
 public class BeanB {
   @Inject
   private BeanA beanA;

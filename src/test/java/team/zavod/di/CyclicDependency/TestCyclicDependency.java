@@ -9,11 +9,11 @@ public class TestCyclicDependency {
   private final ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
   private final BeanFactory beanFactory = new DefaultBeanFactory(new String[]{"team.zavod.di.CyclicDependency"}, this.classLoader);
 
-//  @Test
-//  void test() {
-//    BeanA beanA = beanFactory.getBean(BeanA.class);
-//    BeanB beanB = beanFactory.getBean(BeanB.class);
-//    Assertions.assertSame(beanA, beanB.getBeanA());
-//    Assertions.assertSame(beanB, beanA.getBeanB());
-//  }
+  @Test
+  void test() {
+    BeanA beanA = beanFactory.getBean(BeanA.class);
+    BeanB beanB = beanFactory.getBean(BeanB.class);
+    Assertions.assertSame(beanA, beanB.getBeanA());
+    Assertions.assertSame(beanB, beanA.getBeanB());
+  }
 }
