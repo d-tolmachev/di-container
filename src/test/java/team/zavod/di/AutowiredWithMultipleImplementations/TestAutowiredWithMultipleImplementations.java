@@ -20,6 +20,7 @@ public class TestAutowiredWithMultipleImplementations {
     BeanFactory beanFactory = new DefaultBeanFactory(new String[]{"team.zavod.di.AutowiredWithMultipleImplementations"}, this.classLoader);
     Service service = beanFactory.getBean("service", Service.class);
     service.run();
+    beanFactory.destroyBean("service");
     checkServiceHasCorrectInstanse(service);
   }
 

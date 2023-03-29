@@ -2,7 +2,7 @@ package team.zavod.di.factory;
 
 import java.util.Collection;
 import java.util.List;
-import team.zavod.di.config.postprocessor.BeanPostProcessor;
+import team.zavod.di.config.postprocessor.DestructionAwareBeanPostProcessor;
 import team.zavod.di.config.scope.Scope;
 import team.zavod.di.exception.BeanException;
 import team.zavod.di.factory.exception.NoSuchBeanDefinitionException;
@@ -27,11 +27,11 @@ public interface BeanFactory extends BeanDefinitionRegistry {
 
   boolean isThread(String name) throws NoSuchBeanDefinitionException;
 
-  void addBeanPostProcessor(BeanPostProcessor beanPostProcessor);
+  void addBeanPostProcessor(DestructionAwareBeanPostProcessor beanPostProcessor);
 
-  void addBeanPostProcessors(Collection<? extends BeanPostProcessor> beanPostProcessors);
+  void addBeanPostProcessors(Collection<? extends DestructionAwareBeanPostProcessor> beanPostProcessors);
 
-  List<BeanPostProcessor> getBeanPostProcessors();
+  List<DestructionAwareBeanPostProcessor> getBeanPostProcessors();
 
   void registerScope(String scopeName, Scope scope);
 

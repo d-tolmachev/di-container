@@ -25,7 +25,6 @@ import net.bytebuddy.matcher.ElementMatchers;
 import team.zavod.di.config.BeanDefinition;
 import team.zavod.di.config.dependency.ArgumentValues;
 import team.zavod.di.config.dependency.MethodArgumentValues;
-import team.zavod.di.config.postprocessor.BeanPostProcessor;
 import team.zavod.di.config.dependency.ConstructorArgumentValues;
 import team.zavod.di.config.postprocessor.DestructionAwareBeanPostProcessor;
 import team.zavod.di.config.postprocessor.InitDestroyBeanPostProcessor;
@@ -56,7 +55,7 @@ public class DefaultBeanFactory implements BeanFactory {
   private final BeanConfigurator beanConfigurator;
   private final ClasspathHelper classpathHelper;
   private final BeanDefinitionRegistry beanDefinitionRegistry;
-  private final List<BeanPostProcessor> beanPostProcessors;
+  private final List<DestructionAwareBeanPostProcessor> beanPostProcessors;
   private final Map<String, Scope> scopes;
 
   private DefaultBeanFactory(ConfigurationMetadata configurationMetadata) {
@@ -181,17 +180,17 @@ public class DefaultBeanFactory implements BeanFactory {
   }
 
   @Override
-  public void addBeanPostProcessor(BeanPostProcessor beanPostProcessor) {
+  public void addBeanPostProcessor(DestructionAwareBeanPostProcessor beanPostProcessor) {
     this.beanPostProcessors.add(beanPostProcessor);
   }
 
   @Override
-  public void addBeanPostProcessors(Collection<? extends BeanPostProcessor> beanPostProcessors) {
+  public void addBeanPostProcessors(Collection<? extends DestructionAwareBeanPostProcessor> beanPostProcessors) {
     this.beanPostProcessors.addAll(beanPostProcessors);
   }
 
   @Override
-  public List<BeanPostProcessor> getBeanPostProcessors() {
+  public List<DestructionAwareBeanPostProcessor> getBeanPostProcessors() {
     return this.beanPostProcessors;
   }
 
@@ -300,10 +299,7 @@ public class DefaultBeanFactory implements BeanFactory {
   }
 
   private void processDestruction(BeanDefinition beanDefinition, Object bean) {
-    this.beanPostProcessors.stream()
-        .filter(beanPostProcessor -> beanPostProcessor.getClass().isInstance(DestructionAwareBeanPostProcessor.class))
-        .map(beanPostProcessor -> (DestructionAwareBeanPostProcessor) beanPostProcessor)
-        .forEach(beanPostProcessor -> beanPostProcessor.postProcessBeforeDestruction(bean, beanDefinition.getBeanName()));
+    this.beanPostProcessors.forEach(beanPostProcessor -> beanPostProcessor.postProcessBeforeDestruction(bean, beanDefinition.getBeanName()));
   }
 
   @SuppressWarnings("resource")
