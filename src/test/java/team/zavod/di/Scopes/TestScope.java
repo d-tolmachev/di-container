@@ -24,9 +24,41 @@ public class TestScope {
   }
 
   @Test
+  void testScopeSingleThread() {
+    ScopeThreadBean A = beanFactory.getBean(ScopeThreadBean.class);
+    ScopeThreadBean B = beanFactory.getBean(ScopeThreadBean.class);
+    Assertions.assertSame(A, B);
+  }
+
+  @Test
+  void testScopeMultiThread() throws InterruptedException {
+    TestThreadInsideSingletonGenerator threadA = new TestThreadInsideSingletonGenerator();
+    TestThreadInsideSingletonGenerator threadB = new TestThreadInsideSingletonGenerator();
+    threadA.start();
+    threadB.start();
+    threadA.join();
+    threadB.join();
+
+    Assertions.assertNotSame(threadA.getCreatedBean(), threadB.getCreatedBean());
+  }
+
+  @Test
   void testScopePrototype() {
     ScopePrototypeBean A = beanFactory.getBean(ScopePrototypeBean.class);
     ScopePrototypeBean B = beanFactory.getBean(ScopePrototypeBean.class);
     Assertions.assertNotSame(A, B);
+  }
+
+  class TestThreadInsideSingletonGenerator extends Thread {
+    private final BeanFactory beanFactory = new DefaultBeanFactory(new String[]{"team.zavod.di.Scopes"});
+    private ScopeSingletonBean resultBean;
+    @Override
+    public void run() {
+      resultBean = beanFactory.getBean(ScopeSingletonBean.class);
+    }
+
+    public ScopeSingletonBean getCreatedBean() {
+      return this.resultBean;
+    }
   }
 }
