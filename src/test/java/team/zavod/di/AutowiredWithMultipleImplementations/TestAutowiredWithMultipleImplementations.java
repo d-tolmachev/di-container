@@ -30,6 +30,7 @@ public class TestAutowiredWithMultipleImplementations {
     BeanFactory beanFactory = new DefaultBeanFactory(ServiceConfig.class, this.classLoader);
     Service service = beanFactory.getBean("service", Service.class);
     service.run();
+    beanFactory.destroyBean("service");
     checkServiceHasCorrectInstanse(service);
   }
 
@@ -39,6 +40,7 @@ public class TestAutowiredWithMultipleImplementations {
     BeanFactory beanFactory = new DefaultBeanFactory(classLoader.getResourceAsStream("AutowiredWithMultipleImplementations.xml"), this.classLoader);
     Service service = beanFactory.getBean("service", Service.class);
     service.run();
+    beanFactory.destroyBean("service");
     checkServiceHasCorrectInstanse(service);
   }
 

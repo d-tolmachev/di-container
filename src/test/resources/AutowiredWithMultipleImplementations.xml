@@ -4,8 +4,10 @@
     <base-package>team.zavod.di.AutowiredWithMultipleImplementations</base-package>
   </base-packages>
   <beans>
-    <bean id="paymentSystem" class="team.zavod.di.AutowiredWithMultipleImplementations.impl.CardPaymentSystem"/>
-    <bean id="service" class="team.zavod.di.AutowiredWithMultipleImplementations.Service">
+    <bean id="paymentSystem" class="team.zavod.di.AutowiredWithMultipleImplementations.impl.CardPaymentSystem"
+          lazy-init="true"/>
+    <bean id="service" class="team.zavod.di.AutowiredWithMultipleImplementations.Service" scope="prototype"
+          init-method="init" destroy-method="destroy">
       <constructor-arg ref="paymentSystem"/>
     </bean>
   </beans>
