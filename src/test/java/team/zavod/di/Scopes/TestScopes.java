@@ -5,7 +5,7 @@ import org.junit.jupiter.api.Test;
 import team.zavod.di.factory.BeanFactory;
 import team.zavod.di.factory.DefaultBeanFactory;
 
-public class TestScope {
+public class TestScopes {
   private final ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
   private final BeanFactory beanFactory = new DefaultBeanFactory(new String[]{"team.zavod.di.Scopes"}, this.classLoader);
 
